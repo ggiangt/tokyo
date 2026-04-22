@@ -2,637 +2,135 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Tokyo Diorama</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tokyo Sunset Diorama</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{background:#e8e4df;overflow:hidden;}
-  canvas{display:block;}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 24% 20%, rgba(255, 216, 176, 0.9) 0%, rgba(255, 216, 176, 0) 34%),
+      radial-gradient(circle at 78% 24%, rgba(255, 230, 166, 0.68) 0%, rgba(255, 230, 166, 0) 28%),
+      linear-gradient(180deg, #f4efe7 0%, #f2e1cb 52%, #eed4aa 100%);
+  }
+  canvas { display: block; }
 </style>
 </head>
 <body>
 <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-(function(){
-
-// ── renderer ────────────────────────────────────────────────────────────────
-var renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
-renderer.outputEncoding = THREE.sRGBEncoding;
-document.body.appendChild(renderer.domElement);
-
-// ── scene ───────────────────────────────────────────────────────────────────
-var scene = new THREE.Scene();
-scene.background = new THREE.Color(0xddd8d2);
-scene.fog = new THREE.Fog(0xddd8d2, 60, 120);
-
-// ── camera (orthographic isometric) ─────────────────────────────────────────
-var aspect = window.innerWidth / window.innerHeight;
-var camSize = 14;
-var camera = new THREE.OrthographicCamera(
-  -camSize * aspect, camSize * aspect,
-  camSize, -camSize,
-  0.1, 200
-);
-camera.position.set(22, 18, 22);
-camera.lookAt(0, 2, 0);
-
-// ── controls ─────────────────────────────────────────────────────────────────
-var controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 2, 0);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.minZoom = 0.4;
-controls.maxZoom = 3.0;
-controls.maxPolarAngle = Math.PI * 0.48;
-controls.update();
-
-// ── lights ───────────────────────────────────────────────────────────────────
-var hemi = new THREE.HemisphereLight(0xfff4e0, 0xc8b89a, 0.9);
-scene.add(hemi);
-
-var sun = new THREE.DirectionalLight(0xfff0cc, 1.6);
-sun.position.set(-18, 28, 12);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 80;
-sun.shadow.camera.left = -22;
-sun.shadow.camera.right = 22;
-sun.shadow.camera.top = 22;
-sun.shadow.camera.bottom = -22;
-sun.shadow.bias = -0.001;
-scene.add(sun);
-
-// ── material helpers ─────────────────────────────────────────────────────────
-function mat(hex, rough, metal) {
-  return new THREE.MeshStandardMaterial({
-    color: hex,
-    roughness: (rough !== undefined) ? rough : 0.85,
-    metalness: (metal !== undefined) ? metal : 0.0
-  });
-}
-
-// ── roundBox geometry ────────────────────────────────────────────────────────
-function roundBox(w, h, d, r, segs) {
-  r = (r !== undefined) ? r : 0.08;
-  segs = segs || 4;
-  var g = new THREE.BoxGeometry(w, h, d, segs, segs, segs);
-  var pos = g.attributes.position;
-  var hw = Math.max(0, w * 0.5 - r);
-  var hh = Math.max(0, h * 0.5 - r);
-  var hd = Math.max(0, d * 0.5 - r);
-  for (var i = 0; i < pos.count; i++) {
-    var x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    var ix = Math.max(-hw, Math.min(hw, x));
-    var iy = Math.max(-hh, Math.min(hh, y));
-    var iz = Math.max(-hd, Math.min(hd, z));
-    var dx = x - ix, dy = y - iy, dz = z - iz;
-    var len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (len > 0.0001) {
-      pos.setXYZ(i, ix + dx / len * r, iy + dy / len * r, iz + dz / len * r);
-    }
-  }
-  g.computeVertexNormals();
-  return g;
-}
-
-function mesh(geo, m, castShadow, receiveShadow) {
-  var o = new THREE.Mesh(geo, m);
-  o.castShadow = (castShadow !== false);
-  o.receiveShadow = (receiveShadow !== false);
-  return o;
-}
-
-// ── colors ───────────────────────────────────────────────────────────────────
-var C = {
-  base:         0xd4c9b0,
-  baseDark:     0xbfb49c,
-  path:         0xcec3aa,
-  pathEdge:     0xb8ae98,
-  grass:        0x8db87a,
-  torii:        0xe05c1a,
-  towerOrange:  0xe8621e,
-  towerGrey:    0xc8c0b4,
-  roofTeal:     0x5a9e8a,
-  roofDark:     0x3d7a68,
-  wallCream:    0xf0e8d8,
-  wallBeige:    0xe2d9c4,
-  woodBrown:    0x8b6344,
-  sakuraPink:   0xf4a8c0,
-  sakuraPink2:  0xec8eb2,
-  trunkBrown:   0x7a5533,
-  shadowGrey:   0x9a9490,
-  figureBlue:   0x4a7abf,
-  figurePink:   0xd4607a,
-  figureYellow: 0xd4a830,
-  stallCanvas:  0xf2d89a,
-  stallRed:     0xd44040,
-  water:        0x7ab8d0,
-  lanternRed:   0xcc3333,
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// BASE PLATFORM
-// ─────────────────────────────────────────────────────────────────────────────
-var baseGeo = roundBox(16, 1.2, 16, 0.2, 6);
-var baseMesh = mesh(baseGeo, mat(C.base, 0.9), false, true);
-baseMesh.position.set(0, -0.6, 0);
-scene.add(baseMesh);
-
-var trimGeo = roundBox(16.4, 0.35, 16.4, 0.15, 4);
-var trimMesh = mesh(trimGeo, mat(C.baseDark, 0.95), false, false);
-trimMesh.position.set(0, -1.37, 0);
-scene.add(trimMesh);
-
-// ── grass patches ─────────────────────────────────────────────────────────────
-function grassPatch(x, z, w, d) {
-  var g = new THREE.BoxGeometry(w, 0.04, d);
-  var m = mesh(g, mat(C.grass, 0.95), false, true);
-  m.position.set(x, 0.02, z);
-  scene.add(m);
-}
-grassPatch(-5.5, -5.5, 5, 5);
-grassPatch( 5.5, -5.5, 5, 5);
-grassPatch(-5.5,  5.5, 5, 5);
-grassPatch( 5.5,  5.5, 5, 5);
-grassPatch(-6.5,  0,   2.0, 6);
-grassPatch( 6.5,  0,   2.0, 6);
-
-// ── stone path ────────────────────────────────────────────────────────────────
-function pathRect(x, z, w, d) {
-  var g = new THREE.BoxGeometry(w, 0.05, d);
-  var m = mesh(g, mat(C.path, 0.92), false, true);
-  m.position.set(x, 0.025, z);
-  scene.add(m);
-}
-pathRect(0, 0, 3, 16);
-pathRect(0, 0, 16, 3);
-(function(){
-  var shape = new THREE.Shape();
-  shape.absarc(0, 0, 2.8, 0, Math.PI * 2, false);
-  var hole = new THREE.Path();
-  hole.absarc(0, 0, 2.0, 0, Math.PI * 2, true);
-  shape.holes.push(hole);
-  var extG = new THREE.ExtrudeGeometry(shape, {depth: 0.05, bevelEnabled: false});
-  var circ = mesh(extG, mat(C.pathEdge, 0.92), false, true);
-  circ.rotation.x = -Math.PI / 2;
-  circ.position.set(0, 0.025, 0);
-  scene.add(circ);
-})();
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TOKYO TOWER
-// ─────────────────────────────────────────────────────────────────────────────
-var towerGroup = new THREE.Group();
-scene.add(towerGroup);
-
-var tMat = mat(C.towerOrange, 0.75, 0.05);
-var tMatGrey = mat(C.towerGrey, 0.75, 0.05);
-
-function towerSection(rBot, rTop, h, yOff, material) {
-  var g = new THREE.CylinderGeometry(rTop, rBot, h, 8);
-  var m = mesh(g, material || tMat, true, true);
-  m.position.y = yOff;
-  towerGroup.add(m);
-  return m;
-}
-
-var legMat = mat(C.towerOrange, 0.75, 0.04);
-var legPositions = [[-0.55, 0.55], [0.55, 0.55], [-0.55, -0.55], [0.55, -0.55]];
-for (var li = 0; li < legPositions.length; li++) {
-  var lx = legPositions[li][0], lz = legPositions[li][1];
-  var legG = new THREE.CylinderGeometry(0.09, 0.18, 1.4, 6);
-  var legM = mesh(legG, legMat, true, true);
-  legM.position.set(lx, 0.7, lz);
-  legM.rotation.z = (lx < 0) ? 0.22 : -0.22;
-  legM.rotation.x = (lz < 0) ? 0.22 : -0.22;
-  towerGroup.add(legM);
-}
-
-towerSection(0.42, 0.34, 2.0, 1.9);
-towerSection(0.34, 0.26, 2.0, 3.9);
-towerSection(0.26, 0.18, 2.0, 5.9);
-var deckG = roundBox(1.1, 0.28, 1.1, 0.06, 4);
-var deckM = mesh(deckG, mat(C.towerGrey, 0.7, 0.05), true, true);
-deckM.position.y = 7.1;
-towerGroup.add(deckM);
-towerSection(0.14, 0.10, 2.2, 8.3);
-towerSection(0.10, 0.06, 1.8, 10.5);
-var needleG = new THREE.CylinderGeometry(0.02, 0.06, 1.8, 6);
-var needleM = mesh(needleG, tMat, true, false);
-needleM.position.y = 12.5;
-towerGroup.add(needleM);
-
-var girdY = [2.5, 4.5, 6.5, 8.8, 10.8];
-var girdR = [0.46, 0.36, 0.26, 0.16, 0.10];
-for (var gi = 0; gi < girdY.length; gi++) {
-  var girdG = new THREE.TorusGeometry(girdR[gi], 0.04, 6, 16);
-  var girdM = mesh(girdG, tMatGrey, true, false);
-  girdM.position.y = girdY[gi];
-  towerGroup.add(girdM);
-}
-
-towerGroup.position.set(0, 0, 0);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TORII GATE
-// ─────────────────────────────────────────────────────────────────────────────
-var toriiGroup = new THREE.Group();
-scene.add(toriiGroup);
-var toriiMat = mat(C.torii, 0.7, 0.04);
-
-var pillarG = new THREE.CylinderGeometry(0.12, 0.12, 2.8, 10);
-[-0.7, 0.7].forEach(function(x) {
-  var p = mesh(pillarG, toriiMat, true, true);
-  p.position.set(x, 1.4, 0);
-  toriiGroup.add(p);
-});
-var kasagiG = roundBox(2.2, 0.22, 0.22, 0.06, 4);
-var kasagi = mesh(kasagiG, toriiMat, true, false);
-kasagi.position.y = 2.85;
-toriiGroup.add(kasagi);
-var nukiG = roundBox(1.6, 0.16, 0.18, 0.04, 4);
-var nuki = mesh(nukiG, toriiMat, true, false);
-nuki.position.y = 2.35;
-toriiGroup.add(nuki);
-[-1.0, 1.0].forEach(function(sx) {
-  var hornG = new THREE.CylinderGeometry(0.07, 0.1, 0.35, 8);
-  var horn = mesh(hornG, toriiMat, true, false);
-  horn.position.set(sx * 1.08, 2.85, 0);
-  horn.rotation.z = sx * 0.15;
-  toriiGroup.add(horn);
-});
-toriiGroup.position.set(0, 0, 5.2);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SHRINE BUILDINGS
-// ─────────────────────────────────────────────────────────────────────────────
-function buildShrine(x, z, rot) {
-  var g = new THREE.Group();
-  g.position.set(x, 0, z);
-  g.rotation.y = rot || 0;
-  scene.add(g);
-
-  var platG = roundBox(3.8, 0.3, 3.2, 0.08, 4);
-  var plat = mesh(platG, mat(C.wallBeige, 0.92), true, true);
-  plat.position.y = 0.15;
-  g.add(plat);
-
-  var stepG = new THREE.BoxGeometry(1.4, 0.14, 0.6);
-  for (var si = 0; si < 3; si++) {
-    var step = mesh(stepG, mat(C.path, 0.9), false, true);
-    step.position.set(0, 0.07 + si * 0.14, 1.6 + si * -0.6);
-    g.add(step);
-  }
-
-  var bodyG = roundBox(3.0, 1.6, 2.4, 0.1, 4);
-  var body = mesh(bodyG, mat(C.wallCream, 0.88), true, true);
-  body.position.y = 1.1;
-  g.add(body);
-
-  var colG = new THREE.CylinderGeometry(0.1, 0.1, 1.6, 10);
-  var colMat = mat(C.woodBrown, 0.8);
-  [-1.1, -0.37, 0.37, 1.1].forEach(function(cx) {
-    var col = mesh(colG, colMat, true, true);
-    col.position.set(cx, 1.1, 1.2);
-    g.add(col);
-  });
-
-  var roofBaseG = roundBox(3.8, 0.25, 3.0, 0.08, 4);
-  var roofBase = mesh(roofBaseG, mat(C.roofTeal, 0.8), true, false);
-  roofBase.position.y = 2.05;
-  g.add(roofBase);
-
-  (function addRoof(yBase, w, d, h, col) {
-    var shape = new THREE.Shape();
-    shape.moveTo(-w / 2, 0);
-    shape.lineTo(0, h);
-    shape.lineTo(w / 2, 0);
-    shape.lineTo(-w / 2, 0);
-    var roofG = new THREE.ExtrudeGeometry(shape, {
-      depth: d, bevelEnabled: true,
-      bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 2
-    });
-    roofG.center();
-    var roof = mesh(roofG, mat(col, 0.75), true, false);
-    roof.rotation.x = Math.PI / 2;
-    roof.position.y = yBase;
-    g.add(roof);
-  })(2.2, 4.2, 3.2, 1.3, C.roofTeal);
-
-  var up = new THREE.Group();
-  up.position.y = 3.3;
-  g.add(up);
-  var upBodyG = roundBox(2.0, 0.9, 1.6, 0.08, 4);
-  var upBody = mesh(upBodyG, mat(C.wallCream, 0.88), true, true);
-  upBody.position.y = 0.45;
-  up.add(upBody);
-  var upRoofBase = mesh(new THREE.BoxGeometry(2.6, 0.18, 2.2), mat(C.roofTeal, 0.8), true, false);
-  upRoofBase.position.y = 1.0;
-  up.add(upRoofBase);
-  (function addSmallRoof(w, d, h, col) {
-    var shape = new THREE.Shape();
-    shape.moveTo(-w / 2, 0);
-    shape.lineTo(0, h);
-    shape.lineTo(w / 2, 0);
-    shape.lineTo(-w / 2, 0);
-    var roofG = new THREE.ExtrudeGeometry(shape, {depth: d, bevelEnabled: false});
-    roofG.center();
-    var roof = mesh(roofG, mat(col, 0.75), true, false);
-    roof.rotation.x = Math.PI / 2;
-    roof.position.y = 1.1;
-    up.add(roof);
-  })(3.0, 2.4, 0.9, C.roofDark);
-
-  return g;
-}
-
-buildShrine(-6.5, -2.5, 0.3);
-buildShrine( 6.5, -2.5, -0.3);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PAGODA
-// ─────────────────────────────────────────────────────────────────────────────
-(function buildPagoda() {
-  var g = new THREE.Group();
-  g.position.set(0, 0, -6.5);
-  scene.add(g);
-
-  var bG = roundBox(2.8, 0.25, 2.8, 0.08, 4);
-  g.add(mesh(bG, mat(C.wallBeige, 0.9), false, true)).position.y = 0.12;
-
-  var levels = [
-    {w:2.4, h:1.2, rw:3.2, rh:0.6, rd:3.2},
-    {w:1.8, h:1.0, rw:2.4, rh:0.5, rd:2.4},
-    {w:1.2, h:0.8, rw:1.8, rh:0.4, rd:1.8},
-  ];
-
-  var curY = 0.25;
-  for (var li2 = 0; li2 < levels.length; li2++) {
-    var lv = levels[li2];
-    var bodyG2 = roundBox(lv.w, lv.h, lv.w, 0.08, 4);
-    var bod = mesh(bodyG2, mat(C.wallCream, 0.88), true, true);
-    bod.position.y = curY + lv.h / 2;
-    g.add(bod);
-    var shape2 = new THREE.Shape();
-    shape2.moveTo(-lv.rw / 2, 0);
-    shape2.lineTo(0, lv.rh);
-    shape2.lineTo(lv.rw / 2, 0);
-    shape2.lineTo(-lv.rw / 2, 0);
-    var roofG2 = new THREE.ExtrudeGeometry(shape2, {depth:lv.rd, bevelEnabled:false});
-    roofG2.center();
-    var roofM2 = mesh(roofG2, mat(C.roofTeal, 0.78), true, false);
-    roofM2.rotation.x = Math.PI / 2;
-    roofM2.position.y = curY + lv.h + lv.rh * 0.3;
-    g.add(roofM2);
-    curY += lv.h + lv.rh * 0.55;
-  }
-  var spireG = new THREE.CylinderGeometry(0.03, 0.09, 1.4, 8);
-  var spire = mesh(spireG, mat(C.torii, 0.7, 0.05), true, false);
-  spire.position.y = curY + 0.7;
-  g.add(spire);
-})();
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STONE LANTERNS
-// ─────────────────────────────────────────────────────────────────────────────
-function stoneLantern(x, z) {
-  var g = new THREE.Group();
-  g.position.set(x, 0, z);
-  scene.add(g);
-  var basePlinth = mesh(roundBox(0.3, 0.12, 0.3, 0.04, 3), mat(C.path, 0.92), true, true);
-  basePlinth.position.y = 0.06;
-  g.add(basePlinth);
-  var pole = mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.7, 8), mat(C.path, 0.92), true, true);
-  pole.position.y = 0.41;
-  g.add(pole);
-  var cap = mesh(roundBox(0.38, 0.12, 0.38, 0.04, 3), mat(C.shadowGrey, 0.88), true, false);
-  cap.position.y = 0.82;
-  g.add(cap);
-  var box2 = mesh(roundBox(0.28, 0.3, 0.28, 0.04, 3), mat(C.wallCream, 0.75, 0.0), true, false);
-  box2.position.y = 1.0;
-  g.add(box2);
-  var roof2 = mesh(roundBox(0.42, 0.1, 0.42, 0.04, 3), mat(C.shadowGrey, 0.88), true, false);
-  roof2.position.y = 1.2;
-  g.add(roof2);
-}
-var lx = 1.8;
-var lzArr = [-5.0, -2.8, 2.8, 5.0];
-for (var lni = 0; lni < lzArr.length; lni++) {
-  stoneLantern(-lx, lzArr[lni]);
-  stoneLantern( lx, lzArr[lni]);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CHERRY BLOSSOM TREES
-// ─────────────────────────────────────────────────────────────────────────────
-function sakuraTree(x, z, scale) {
-  scale = scale || 1.0;
-  var g = new THREE.Group();
-  g.position.set(x, 0, z);
-  scene.add(g);
-
-  var trunkMat = mat(C.trunkBrown, 0.95);
-  var trunkG = new THREE.CylinderGeometry(0.09 * scale, 0.13 * scale, 1.4 * scale, 8);
-  var trunk = mesh(trunkG, trunkMat, true, true);
-  trunk.position.y = 0.7 * scale;
-  g.add(trunk);
-
-  var canopyColors = [C.sakuraPink, C.sakuraPink2, C.sakuraPink, 0xf8bccf];
-  var canopyCenters = [
-    [0, 0, 0], [0.3, 0.2, 0.1], [-0.28, 0.18, -0.1], [0.05, 0.35, 0.2], [-0.05, 0.3, -0.25]
-  ];
-  for (var ci = 0; ci < canopyCenters.length; ci++) {
-    var cc = canopyCenters[ci];
-    var r2 = (0.55 + Math.random() * 0.15) * scale;
-    var canG = new THREE.SphereGeometry(r2, 9, 7);
-    var can = mesh(canG, mat(canopyColors[ci % canopyColors.length], 0.9), true, false);
-    can.position.set(cc[0] * scale, (1.4 + cc[1]) * scale, cc[2] * scale);
-    g.add(can);
-  }
-}
-
-sakuraTree(-3.5,  6.0, 0.9);
-sakuraTree( 3.5,  6.0, 0.9);
-sakuraTree(-6.5,  3.5, 1.0);
-sakuraTree( 6.5,  3.5, 1.0);
-sakuraTree(-6.5, -3.5, 0.95);
-sakuraTree( 6.5, -3.5, 0.95);
-sakuraTree(-3.5, -6.5, 0.85);
-sakuraTree( 3.5, -6.5, 0.85);
-sakuraTree(-7.0,  0.5, 0.8);
-sakuraTree( 7.0,  0.5, 0.8);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MARKET STALLS
-// ─────────────────────────────────────────────────────────────────────────────
-function marketStall(x, z, rotY) {
-  var g = new THREE.Group();
-  g.position.set(x, 0, z);
-  g.rotation.y = rotY || 0;
-  scene.add(g);
-
-  var counterG = roundBox(1.4, 0.5, 0.7, 0.05, 3);
-  var counter = mesh(counterG, mat(C.woodBrown, 0.9), true, true);
-  counter.position.y = 0.25;
-  g.add(counter);
-
-  [[0.55, 0], [-0.55, 0]].forEach(function(p) {
-    var poleG = new THREE.CylinderGeometry(0.04, 0.04, 1.4, 6);
-    var pole = mesh(poleG, mat(C.woodBrown, 0.9), true, false);
-    pole.position.set(p[0], 0.7, -0.2);
-    g.add(pole);
-  });
-
-  var awningShape = new THREE.Shape();
-  awningShape.moveTo(-0.75, 0);
-  awningShape.lineTo(0.75, 0);
-  awningShape.lineTo(0.85, -0.5);
-  awningShape.lineTo(-0.85, -0.5);
-  awningShape.lineTo(-0.75, 0);
-  var awningG = new THREE.ExtrudeGeometry(awningShape, {depth:0.85, bevelEnabled:false});
-  var awning = mesh(awningG, mat(C.stallCanvas, 0.85), true, false);
-  awning.rotation.x = -Math.PI / 2;
-  awning.position.set(-0.85, 1.38, 0.25);
-  g.add(awning);
-
-  var goodColors = [0xd44040, 0xf0c050, 0x60a060, 0xe07030];
-  for (var gi2 = 0; gi2 < 3; gi2++) {
-    var goodG = new THREE.CylinderGeometry(0.07, 0.07, 0.14, 7);
-    var good = mesh(goodG, mat(goodColors[gi2 % goodColors.length], 0.85), true, false);
-    good.position.set(-0.35 + gi2 * 0.35, 0.57, 0);
-    g.add(good);
-  }
-}
-
-marketStall(-4.0,  5.5, 0.0);
-marketStall( 4.0,  5.5, Math.PI);
-marketStall(-4.0, -5.5, 0.0);
-marketStall( 4.0, -5.5, Math.PI);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TINY HUMAN FIGURES
-// ─────────────────────────────────────────────────────────────────────────────
-function tinyFigure(x, z, colorHex) {
-  var g = new THREE.Group();
-  g.position.set(x, 0, z);
-  scene.add(g);
-  var fMat = mat(colorHex, 0.85);
-  var bodyG2 = new THREE.CylinderGeometry(0.09, 0.09, 0.22, 8);
-  var body2 = mesh(bodyG2, fMat, true, true);
-  body2.position.y = 0.38;
-  g.add(body2);
-  var botCapG = new THREE.SphereGeometry(0.09, 8, 4, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
-  var botCap = mesh(botCapG, fMat, true, true);
-  botCap.position.y = 0.27;
-  g.add(botCap);
-  var topCapG = new THREE.SphereGeometry(0.09, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-  var topCap = mesh(topCapG, fMat, true, false);
-  topCap.position.y = 0.49;
-  g.add(topCap);
-  var headG = new THREE.SphereGeometry(0.1, 8, 6);
-  var head = mesh(headG, mat(0xf5d5b8, 0.85), true, false);
-  head.position.y = 0.7;
-  g.add(head);
-}
-
-var figData = [
-  [-1.0, 4.5, C.figureBlue],  [ 1.0, 4.5, C.figurePink],  [-1.0, 5.5, C.figureYellow],
-  [ 0.5, 3.2, C.figureBlue],  [-0.5, 6.5, C.figurePink],  [ 2.5, 2.8, C.figureBlue],
-  [-2.5, 2.8, C.figurePink],  [ 5.0, 5.5, C.figureYellow], [-5.0, 5.5, C.figureBlue],
-  [ 3.0, 7.0, C.figurePink],  [-3.0,-4.5, C.figureBlue],  [ 3.0,-4.5, C.figureYellow],
-  [ 0.0,-7.5, C.figurePink],
-];
-for (var fi = 0; fi < figData.length; fi++) {
-  tinyFigure(figData[fi][0], figData[fi][1], figData[fi][2]);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WATER RIBBONS
-// ─────────────────────────────────────────────────────────────────────────────
-(function() {
-  function makeRibbon(pts, width, yH, matObj) {
-    var curve = new THREE.CatmullRomCurve3(pts);
-    var points = curve.getPoints(60);
-    var pos = [], idx = [];
-    for (var i = 0; i < points.length; i++) {
-      var p = points[i], tx, tz;
-      if (i < points.length - 1) { tx = points[i+1].x - p.x; tz = points[i+1].z - p.z; }
-      else { tx = p.x - points[i-1].x; tz = p.z - points[i-1].z; }
-      var len = Math.sqrt(tx*tx + tz*tz);
-      if (len > 1e-4) { tx /= len; tz /= len; }
-      var nx = -tz, nz = tx;
-      pos.push(p.x + nx*width, yH, p.z + nz*width,
-               p.x - nx*width, yH, p.z - nz*width);
-      if (i > 0) { var b = (i-1)*2; idx.push(b, b+1, b+2, b+1, b+3, b+2); }
-    }
-    var geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setIndex(idx);
-    geo.computeVertexNormals();
-    var m = new THREE.Mesh(geo, matObj);
-    m.receiveShadow = true;
-    return m;
-  }
-
-  var wMat = mat(C.water, 0.3, 0.05);
-  function rv(x, z) { return new THREE.Vector3(x, 0, z); }
-  scene.add(makeRibbon([rv(7.0,-7.5),rv(7.4,-3.5),rv(6.8,0),rv(7.3,3.5),rv(7.0,7.5)], 0.20, 0.03, wMat));
-  scene.add(makeRibbon([rv(7.6,-7.5),rv(8.0,-3.5),rv(7.4,0),rv(7.9,3.5),rv(7.6,7.5)], 0.16, 0.03, wMat));
-  scene.add(makeRibbon([rv(8.2,-7.5),rv(8.5,-3.5),rv(8.0,0),rv(8.4,3.5),rv(8.2,7.5)], 0.13, 0.03, wMat));
-})();
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HANGING LANTERNS
-// ─────────────────────────────────────────────────────────────────────────────
-function hangingLantern(x, y, z) {
-  var g = new THREE.Group();
-  g.position.set(x, y, z);
-  scene.add(g);
-  var lanG = new THREE.CylinderGeometry(0.1, 0.1, 0.22, 8);
-  var lan = mesh(lanG, mat(C.lanternRed, 0.8), true, false);
-  g.add(lan);
-  var topG = new THREE.CylinderGeometry(0.06, 0.1, 0.06, 8);
-  var top = mesh(topG, mat(C.woodBrown, 0.85), true, false);
-  top.position.y = 0.14;
-  g.add(top);
-  var botG = new THREE.CylinderGeometry(0.06, 0.06, 0.08, 8);
-  var bot = mesh(botG, mat(C.woodBrown, 0.85), true, false);
-  bot.position.y = -0.15;
-  g.add(bot);
-}
-
-var lhArr = [[-1.8, 3.5, 4.5], [1.8, 3.5, 4.5], [-1.8, 3.5, 3.5], [1.8, 3.5, 3.5]];
-for (var lhi = 0; lhi < lhArr.length; lhi++) {
-  hangingLantern(lhArr[lhi][0], lhArr[lhi][1], lhArr[lhi][2]);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RENDER LOOP
-// ─────────────────────────────────────────────────────────────────────────────
-window.addEventListener('resize', function() {
-  aspect = window.innerWidth / window.innerHeight;
-  camera.left = -camSize * aspect;
-  camera.right = camSize * aspect;
-  camera.top = camSize;
-  camera.bottom = -camSize;
-  camera.updateProjectionMatrix();
+(function () {
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
-});
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.VSMShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.16;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.appendChild(renderer.domElement);
 
-function animate() {
-  requestAnimationFrame(animate);
+  var scene = new THREE.Scene();
+
+  var aspect = window.innerWidth / window.innerHeight;
+  var camSize = 10;
+  var camera = new THREE.OrthographicCamera(
+    -camSize * aspect, camSize * aspect,
+    camSize, -camSize,
+    0.1, 100
+  );
+  camera.position.set(0, 0, 18);
+  camera.lookAt(0, 0, 0);
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.enableRotate = false;
+  controls.enablePan = false;
+  controls.minZoom = 0.7;
+  controls.maxZoom = 2.4;
   controls.update();
-  renderer.render(scene, camera);
-}
-animate();
 
+  var hemi = new THREE.HemisphereLight(0xffd7a8, 0xb7c0c8, 0.42);
+  scene.add(hemi);
+
+  var sun = new THREE.DirectionalLight(0xffb45c, 2.1);
+  sun.position.set(-10, 6, 9);
+  sun.target.position.set(1.2, -0.8, 0);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 40;
+  sun.shadow.camera.left = -10;
+  sun.shadow.camera.right = 10;
+  sun.shadow.camera.top = 10;
+  sun.shadow.camera.bottom = -10;
+  sun.shadow.bias = -0.0002;
+  sun.shadow.normalBias = 0.02;
+  sun.shadow.radius = 6;
+  sun.shadow.blurSamples = 8;
+  scene.add(sun);
+  scene.add(sun.target);
+
+  var textureLoader = new THREE.TextureLoader();
+
+  var imagePlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshStandardMaterial({
+      color: 0xfff5ea,
+      transparent: true,
+      alphaTest: 0.03,
+      side: THREE.DoubleSide,
+      roughness: 1.0,
+      metalness: 0.0,
+      emissive: 0x2a1606,
+      emissiveIntensity: 0.12
+    })
+  );
+  imagePlane.castShadow = true;
+  imagePlane.receiveShadow = false;
+  scene.add(imagePlane);
+
+  var shadowPad = new THREE.Mesh(
+    new THREE.CircleGeometry(5.1, 40),
+    new THREE.ShadowMaterial({ opacity: 0.2 })
+  );
+  shadowPad.rotation.x = -Math.PI / 2;
+  shadowPad.position.set(0.55, -4.85, 0);
+  shadowPad.receiveShadow = true;
+  scene.add(shadowPad);
+
+  var sceneTexture = textureLoader.load('assets/main-scene.png', function () {
+    sceneTexture.encoding = THREE.sRGBEncoding;
+    var aspectRatio = sceneTexture.image.width / sceneTexture.image.height;
+    var displayHeight = 14;
+    imagePlane.scale.set(displayHeight * aspectRatio, displayHeight, 1);
+  });
+  sceneTexture.encoding = THREE.sRGBEncoding;
+  imagePlane.material.map = sceneTexture;
+  imagePlane.material.needsUpdate = true;
+  imagePlane.position.set(0, 0, 0);
+
+  window.addEventListener('resize', function () {
+    aspect = window.innerWidth / window.innerHeight;
+    camera.left = -camSize * aspect;
+    camera.right = camSize * aspect;
+    camera.top = camSize;
+    camera.bottom = -camSize;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  animate();
 })();
 </script>
 </body>
