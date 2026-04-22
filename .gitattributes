@@ -1,0 +1,2 @@
+assets/main-scene.png filter=lfs diff=lfs merge=lfs -text
+assets/main-scene.png !text !filter !merge !diff

@@ -1,0 +1,3 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #e8e4df; overflow: hidden; }
+canvas { display: block; }
