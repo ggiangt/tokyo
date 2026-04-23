@@ -77,68 +77,48 @@
   }
   .polaroid-tray {
     position: absolute;
-    left: 50%;
-    bottom: -170px;
-    width: min(88vw, 860px);
-    height: 390px;
-    transform: translateX(-50%);
+    inset: 0;
     opacity: 0;
     pointer-events: none;
-    transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease;
+    transition: opacity 260ms ease;
   }
   .polaroid-tray.is-visible {
-    transform: translateX(-50%) translateY(-235px);
     opacity: 1;
     pointer-events: auto;
   }
   .polaroid {
     position: absolute;
-    width: 246px;
-    height: 296px;
+    width: var(--card-width, 246px);
+    height: var(--card-height, 296px);
     transform-origin: center bottom;
     transition: opacity 240ms ease;
     transition-delay: var(--delay, 0ms);
     opacity: 0;
     perspective: 1200px;
     pointer-events: auto;
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
   }
+  .polaroid.is-dragging { cursor: grabbing; }
   .polaroid-tray.is-visible .polaroid {
     opacity: 1;
     animation: polaroidPop 560ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
     animation-delay: var(--delay, 0ms);
   }
-  .polaroid-card {
-    position: absolute;
-    inset: 0;
-    transform-style: preserve-3d;
-    transition: transform 560ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-  .polaroid:hover .polaroid-card {
-    transform: rotateY(180deg);
-  }
   .polaroid-face {
     position: absolute;
     inset: 0;
-    padding: 12px 12px 48px;
+    padding: 12px;
     background: #fffdf9;
     border-radius: 4px;
     box-shadow: 0 22px 44px rgba(77, 59, 40, 0.24);
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
   }
-  .polaroid-face--back {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background:
-      linear-gradient(180deg, rgba(245, 237, 227, 0.9), rgba(255, 253, 249, 0.98)),
-      #fffdf9;
-    transform: rotateY(180deg);
-  }
   .polaroid-photo {
     width: 100%;
-    height: 188px;
+    height: 100%;
     border-radius: 1px;
     background:
       linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0)),
@@ -146,16 +126,9 @@
     background-size: cover;
     background-position: center;
   }
-  .polaroid-label {
-    max-width: 100%;
-    font: 400 19px/1.2 "Homemade Apple", cursive;
-    letter-spacing: 0.02em;
-    color: #74624f;
-    text-align: center;
-  }
   @keyframes polaroidPop {
     0% {
-      transform: translateY(146px) rotate(var(--start-angle, 0deg)) scale(0.96);
+      transform: translateY(180px) rotate(var(--start-angle, 0deg)) scale(0.96);
     }
     65% {
       transform: translateY(-8px) rotate(var(--overshoot-angle, 0deg)) scale(1.01);
@@ -179,37 +152,93 @@
   var pointer = new THREE.Vector2(-10, -10);
   var activeLandmark = null;
   var hoveredLandmark = null;
+  var pressedKeys = {};
+  var viewBounds = {
+    minX: 0,
+    maxX: 0,
+    minY: 0,
+    maxY: 0
+  };
+  var lastFrameTime = performance.now();
+  var hasAppliedInitialView = false;
   var landmarkZones = [
     { key: 'meiji', x: 0.315, y: 0.275, radius: 0.19 },
     { key: 'scramble', x: 0.515, y: 0.695, radius: 0.2 },
-    { key: 'shrine', x: 0.36, y: 0.49, radius: 0.18 },
-    { key: 'cat', x: 0.905, y: 0.16, radius: 0.14 }
+    { key: 'sensoji', x: 0.55, y: 0.49, radius: 0.13 },
+    { key: 'cat', x: 0.66, y: 0.36, radius: 0.13 }
   ];
   var landmarkCards = {
     meiji: [
-      { label: 'Meiji Jingu Gate', angle: -12, left: '18%', top: '64px', photo: 'linear-gradient(135deg, #d7caa3 0%, #b8c8ab 48%, #96a07a 100%)' },
-      { label: 'Shrine Courtyard', angle: -3, left: '34%', top: '30px', photo: 'linear-gradient(135deg, #ebd6bc 0%, #d0b887 44%, #9fad82 100%)' },
-      { label: 'Bridge by Canal', angle: 9, left: '50%', top: '58px', photo: 'linear-gradient(135deg, #c4d9d8 0%, #8fb5b0 46%, #9daf86 100%)' }
+      { label: 'Meiji Jingu Gate', angle: -12, left: '18%', top: '64px', photo: 'url("assets/meiji-photo-1.png")' },
+      { label: 'Shrine Courtyard', angle: -3, left: '34%', top: '30px', photo: 'url("assets/meiji-photo-2.png")' },
+      { label: 'Bridge by Canal', angle: 9, left: '50%', top: '58px', photo: 'url("assets/meiji-photo-3.png")' }
     ],
     scramble: [
-      { label: 'Scramble Crossing', angle: -11, left: '18%', top: '62px', photo: 'linear-gradient(135deg, #cfd4d8 0%, #9da8b0 48%, #ead6ba 100%)' },
-      { label: 'QFront Corner', angle: 0, left: '34%', top: '28px', photo: 'linear-gradient(135deg, #e7d4c8 0%, #c6c2c7 42%, #97a1b5 100%)' },
-      { label: 'City Signs', angle: 12, left: '50%', top: '56px', photo: 'linear-gradient(135deg, #d9d8ee 0%, #b7b9d5 42%, #e6c9ab 100%)' }
+      { label: 'Takeshita Street', angle: -11, left: '18%', top: '62px', photo: 'url("assets/scramble-photo-1.png")' },
+      { label: 'teamLab', angle: 0, left: '34%', top: '28px', photo: 'url("assets/scramble-photo-2.png")' },
+      { label: 'Temple View', angle: 12, left: '50%', top: '56px', photo: 'url("assets/scramble-photo-3.png")' }
     ],
-    shrine: [
-      { label: 'Shrine Rooflines', angle: -10, left: '18%', top: '62px', photo: 'linear-gradient(135deg, #d7d4bc 0%, #b8c8b9 45%, #a9af86 100%)' },
-      { label: 'Lantern Walk', angle: 1, left: '35%', top: '28px', photo: 'linear-gradient(135deg, #efddc4 0%, #ceb589 42%, #a5b191 100%)' },
-      { label: 'Garden Path', angle: 11, left: '51%', top: '56px', photo: 'linear-gradient(135deg, #dbe1cf 0%, #b8c293 44%, #ead6bb 100%)' }
+    sensoji: [
+      { label: 'Senso-ji Gate', angle: -11, left: '12%', top: '58px', photo: 'url("assets/senso-photo-1.png")' },
+      { label: 'Temple Walk', angle: -2, left: '28%', top: '26px', photo: 'url("assets/senso-photo-2.png")' },
+      { label: 'Lantern Detail', angle: 7, left: '44%', top: '54px', photo: 'url("assets/senso-photo-3.png")' },
+      { label: 'Kaminarimon', angle: 13, left: '60%', top: '34px', photo: 'url("assets/senso-photo-4.png")' }
     ],
     cat: [
-      { label: 'Cat Billboard', angle: -9, left: '18%', top: '58px', photo: 'linear-gradient(135deg, #f1e2c8 0%, #c7d5da 42%, #9caab8 100%)' },
-      { label: 'Canal Street', angle: 2, left: '34%', top: '24px', photo: 'linear-gradient(135deg, #dbe2d3 0%, #bbc29f 42%, #ead5b9 100%)' },
-      { label: 'Neighborhood View', angle: 12, left: '50%', top: '54px', photo: 'linear-gradient(135deg, #d3dccb 0%, #aab99f 42%, #e8cab5 100%)' }
+      { label: 'Tokyo Tower Signs', angle: -8, left: '23%', top: '48px', photo: 'url("assets/cat-photo-1.png")' },
+      { label: 'Shinjuku Cat Billboard', angle: 9, left: '43%', top: '34px', photo: 'url("assets/cat-photo-2.png")' }
     ]
   };
   var polaroidTray = document.createElement('div');
   polaroidTray.className = 'polaroid-tray';
   polaroidLayer.appendChild(polaroidTray);
+  var dragState = null;
+
+  function enablePolaroidDragging(frame) {
+    frame.addEventListener('pointerdown', function (event) {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.stopPropagation();
+      dragState = {
+        frame: frame,
+        pointerId: event.pointerId,
+        offsetX: event.clientX - frame.offsetLeft,
+        offsetY: event.clientY - frame.offsetTop
+      };
+      frame.classList.add('is-dragging');
+      frame.style.zIndex = String(Date.now());
+      frame.setPointerCapture(event.pointerId);
+    });
+
+    frame.addEventListener('pointermove', function (event) {
+      if (!dragState || dragState.frame !== frame || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      var nextLeft = event.clientX - dragState.offsetX;
+      var nextTop = event.clientY - dragState.offsetY;
+      var maxLeft = polaroidTray.clientWidth - frame.offsetWidth;
+      var maxTop = polaroidTray.clientHeight - frame.offsetHeight;
+
+      frame.style.left = Math.max(0, Math.min(maxLeft, nextLeft)) + 'px';
+      frame.style.top = Math.max(0, Math.min(maxTop, nextTop)) + 'px';
+    });
+
+    function releaseDrag(event) {
+      if (!dragState || dragState.frame !== frame || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      frame.classList.remove('is-dragging');
+      frame.releasePointerCapture(event.pointerId);
+      dragState = null;
+    }
+
+    frame.addEventListener('pointerup', releaseDrag);
+    frame.addEventListener('pointercancel', releaseDrag);
+  }
 
   function renderPolaroids(key) {
     var cards = landmarkCards[key] || [];
@@ -218,35 +247,36 @@
     for (var i = 0; i < cards.length; i += 1) {
       var card = cards[i];
       var frame = document.createElement('div');
-      var flipCard = document.createElement('div');
       var frontFace = document.createElement('div');
-      var backFace = document.createElement('div');
       var photo = document.createElement('div');
-      var label = document.createElement('div');
+      var aspectVariants = [
+        { width: 214, height: 286 },
+        { width: 246, height: 296 },
+        { width: 268, height: 252 },
+        { width: 228, height: 316 },
+        { width: 258, height: 278 }
+      ];
+      var aspect = aspectVariants[(i + key.length) % aspectVariants.length];
 
       frame.className = 'polaroid';
-      flipCard.className = 'polaroid-card';
       frontFace.className = 'polaroid-face polaroid-face--front';
-      backFace.className = 'polaroid-face polaroid-face--back';
       photo.className = 'polaroid-photo';
-      label.className = 'polaroid-label';
 
-      frame.style.left = card.left;
-      frame.style.top = card.top;
+      frame.style.setProperty('--card-width', aspect.width + 'px');
+      frame.style.setProperty('--card-height', aspect.height + 'px');
+      frame.style.left = 'calc(50% - 270px + ' + (i * 120) + 'px)';
+      frame.style.top = Math.round(window.innerHeight * 0.46 + (i % 2) * 18) + 'px';
       frame.style.setProperty('--angle', card.angle + 'deg');
       frame.style.setProperty('--settle-angle', (card.angle + (Math.random() * 4 - 2)).toFixed(2) + 'deg');
       frame.style.setProperty('--start-angle', (card.angle + (Math.random() * 10 - 5)).toFixed(2) + 'deg');
       frame.style.setProperty('--overshoot-angle', (card.angle + (Math.random() * 12 - 6)).toFixed(2) + 'deg');
       frame.style.setProperty('--delay', Math.round(i * 70 + Math.random() * 45) + 'ms');
-      frame.style.transform = 'translateY(146px) rotate(var(--start-angle)) scale(0.96)';
+      frame.style.transform = 'translateY(180px) rotate(var(--start-angle)) scale(0.96)';
       photo.style.setProperty('--photo', card.photo);
-      label.textContent = card.label;
 
       frontFace.appendChild(photo);
-      backFace.appendChild(label);
-      flipCard.appendChild(frontFace);
-      flipCard.appendChild(backFace);
-      frame.appendChild(flipCard);
+      frame.appendChild(frontFace);
+      enablePolaroidDragging(frame);
       polaroidTray.appendChild(frame);
     }
   }
@@ -322,8 +352,8 @@
   controls.enablePan = true;
   controls.panSpeed = 0.9;
   controls.screenSpacePanning = true;
-  controls.minZoom = 0.7;
-  controls.maxZoom = 2.4;
+  controls.minZoom = 0.8;
+  controls.maxZoom = 3.6;
   controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
   controls.touches.ONE = THREE.TOUCH.PAN;
   controls.update();
@@ -383,11 +413,56 @@
     var aspectRatio = sceneTexture.image.width / sceneTexture.image.height;
     var displayHeight = 14;
     imagePlane.scale.set(displayHeight * aspectRatio, displayHeight, 1);
+    updateViewBounds();
+    applyInitialView();
   });
   sceneTexture.encoding = THREE.sRGBEncoding;
   imagePlane.material.map = sceneTexture;
   imagePlane.material.needsUpdate = true;
   imagePlane.position.set(0, 0, 0);
+
+  function updateViewBounds() {
+    if (!imagePlane.scale.x || !imagePlane.scale.y) {
+      return;
+    }
+
+    var visibleWidth = (camera.right - camera.left) / camera.zoom;
+    var visibleHeight = (camera.top - camera.bottom) / camera.zoom;
+    var halfContentWidth = imagePlane.scale.x * 0.5;
+    var halfContentHeight = imagePlane.scale.y * 0.5;
+
+    viewBounds.minX = Math.min(0, visibleWidth * 0.5 - halfContentWidth);
+    viewBounds.maxX = Math.max(0, halfContentWidth - visibleWidth * 0.5);
+    viewBounds.minY = Math.min(0, visibleHeight * 0.5 - halfContentHeight);
+    viewBounds.maxY = Math.max(0, halfContentHeight - visibleHeight * 0.5);
+  }
+
+  function clampCameraToBounds() {
+    controls.target.x = THREE.MathUtils.clamp(controls.target.x, viewBounds.minX, viewBounds.maxX);
+    controls.target.y = THREE.MathUtils.clamp(controls.target.y, viewBounds.minY, viewBounds.maxY);
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, viewBounds.minX, viewBounds.maxX);
+    camera.position.y = THREE.MathUtils.clamp(camera.position.y, viewBounds.minY, viewBounds.maxY);
+  }
+
+  function applyInitialView() {
+    if (hasAppliedInitialView || !imagePlane.scale.x || !imagePlane.scale.y) {
+      return;
+    }
+
+    var fitZoomX = (camera.right - camera.left) / imagePlane.scale.x;
+    var fitZoomY = (camera.top - camera.bottom) / imagePlane.scale.y;
+    var coverZoom = Math.max(fitZoomX, fitZoomY) * 1.14;
+
+    camera.zoom = THREE.MathUtils.clamp(coverZoom, controls.minZoom, controls.maxZoom);
+    camera.updateProjectionMatrix();
+    updateViewBounds();
+
+    controls.target.set(-0.55, 0.3, 0);
+    camera.position.set(-0.55, 0.3, 18);
+    clampCameraToBounds();
+    controls.update();
+    hasAppliedInitialView = true;
+  }
 
   function getHoveredLandmark(uv) {
     var bestMatch = null;
@@ -423,6 +498,18 @@
     hoveredLandmark = null;
     document.body.classList.remove('is-interactive-hover');
   });
+  window.addEventListener('keydown', function (event) {
+    if (event.key.indexOf('Arrow') === 0) {
+      pressedKeys[event.key] = true;
+      event.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', function (event) {
+    if (event.key.indexOf('Arrow') === 0) {
+      pressedKeys[event.key] = false;
+      event.preventDefault();
+    }
+  });
   renderer.domElement.addEventListener('click', function () {
     if (hoveredLandmark) {
       setActiveLandmark(hoveredLandmark);
@@ -433,16 +520,10 @@
       setActiveLandmark(null);
     }
   });
-  document.addEventListener('click', function (event) {
-    if (!activeLandmark) {
-      return;
+  polaroidTray.addEventListener('click', function (event) {
+    if (event.target === polaroidTray) {
+      setActiveLandmark(null);
     }
-
-    if (polaroidTray.contains(event.target) || event.target === renderer.domElement) {
-      return;
-    }
-
-    setActiveLandmark(null);
   });
 
   window.addEventListener('resize', function () {
@@ -453,20 +534,41 @@
     camera.bottom = -camSize;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    updateViewBounds();
+    if (hasAppliedInitialView) {
+      clampCameraToBounds();
+      controls.update();
+    } else {
+      applyInitialView();
+    }
   });
 
   function animate() {
     requestAnimationFrame(animate);
+    var now = performance.now();
+    var delta = Math.min((now - lastFrameTime) / 1000, 0.05);
+    lastFrameTime = now;
+
+    var keyboardPanSpeed = 4.6 / camera.zoom;
+    var moveX = 0;
+    var moveY = 0;
+
+    if (pressedKeys.ArrowLeft) { moveX -= keyboardPanSpeed * delta; }
+    if (pressedKeys.ArrowRight) { moveX += keyboardPanSpeed * delta; }
+    if (pressedKeys.ArrowUp) { moveY += keyboardPanSpeed * delta; }
+    if (pressedKeys.ArrowDown) { moveY -= keyboardPanSpeed * delta; }
+
+    if (moveX || moveY) {
+      controls.target.x += moveX;
+      controls.target.y += moveY;
+      camera.position.x += moveX;
+      camera.position.y += moveY;
+    }
 
     controls.target.z = 0;
     camera.position.z = 18;
-
-    var horizontalPanLimit = 4.8 / camera.zoom;
-    var verticalPanLimit = 2.8 / camera.zoom;
-    controls.target.x = THREE.MathUtils.clamp(controls.target.x, -horizontalPanLimit, horizontalPanLimit);
-    controls.target.y = THREE.MathUtils.clamp(controls.target.y, -verticalPanLimit, verticalPanLimit);
-    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -horizontalPanLimit, horizontalPanLimit);
-    camera.position.y = THREE.MathUtils.clamp(camera.position.y, -verticalPanLimit, verticalPanLimit);
+    updateViewBounds();
+    clampCameraToBounds();
 
     controls.update();
 
