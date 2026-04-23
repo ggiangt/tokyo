@@ -98,15 +98,14 @@
     border-radius: 4px;
     box-shadow: 0 22px 44px rgba(77, 59, 40, 0.24);
     transform-origin: center bottom;
-    transition:
-      transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
-      opacity 240ms ease;
+    transition: opacity 240ms ease;
     transition-delay: var(--delay, 0ms);
     opacity: 0;
   }
   .polaroid-tray.is-visible .polaroid {
-    transform: translateY(0) rotate(var(--angle, 0deg));
     opacity: 1;
+    animation: polaroidPop 560ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    animation-delay: var(--delay, 0ms);
   }
   .polaroid-photo {
     width: 100%;
@@ -127,6 +126,17 @@
     letter-spacing: 0.02em;
     color: #74624f;
     text-align: center;
+  }
+  @keyframes polaroidPop {
+    0% {
+      transform: translateY(146px) rotate(var(--start-angle, 0deg)) scale(0.96);
+    }
+    65% {
+      transform: translateY(-8px) rotate(var(--overshoot-angle, 0deg)) scale(1.01);
+    }
+    100% {
+      transform: translateY(0) rotate(var(--settle-angle, 0deg)) scale(1);
+    }
   }
 </style>
 </head>
@@ -191,8 +201,11 @@
       frame.style.left = card.left;
       frame.style.top = card.top;
       frame.style.setProperty('--angle', card.angle + 'deg');
-      frame.style.setProperty('--delay', Math.round(Math.random() * 120) + 'ms');
-      frame.style.transform = 'translateY(146px) rotate(' + card.angle + 'deg)';
+      frame.style.setProperty('--settle-angle', (card.angle + (Math.random() * 4 - 2)).toFixed(2) + 'deg');
+      frame.style.setProperty('--start-angle', (card.angle + (Math.random() * 10 - 5)).toFixed(2) + 'deg');
+      frame.style.setProperty('--overshoot-angle', (card.angle + (Math.random() * 12 - 6)).toFixed(2) + 'deg');
+      frame.style.setProperty('--delay', Math.round(i * 70 + Math.random() * 45) + 'ms');
+      frame.style.transform = 'translateY(146px) rotate(var(--start-angle)) scale(0.96)';
       photo.style.setProperty('--photo', card.photo);
       label.textContent = card.label;
 
