@@ -1,640 +1,846 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tokyo Sunset Diorama</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Homemade+Apple&display=swap" rel="stylesheet">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    position: relative;
-    overflow: hidden;
-    background:
-      radial-gradient(circle at 24% 20%, rgba(255, 216, 176, 0.9) 0%, rgba(255, 216, 176, 0) 34%),
-      radial-gradient(circle at 78% 24%, rgba(255, 230, 166, 0.68) 0%, rgba(255, 230, 166, 0) 28%),
-      linear-gradient(180deg, #f4efe7 0%, #f2e1cb 52%, #eed4aa 100%);
-  }
-  body.is-interactive-hover,
-  body.is-interactive-hover canvas {
-    cursor: pointer;
-  }
-  .polaroid-layer,
-  .petal-layer {
-    position: fixed;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
-  }
-  .polaroid-layer { z-index: 4; }
-  .petal-layer { z-index: 5; }
-  canvas {
-    position: relative;
-    z-index: 1;
-    display: block;
-    filter: saturate(1.14) brightness(0.93) contrast(1.04);
-  }
-  .petal {
-    position: absolute;
-    top: -12vh;
-    width: 12px;
-    height: 10px;
-    background: linear-gradient(145deg, rgba(244, 214, 218, 0.84) 0%, rgba(233, 187, 196, 0.82) 58%, rgba(214, 166, 176, 0.8) 100%);
-    clip-path: polygon(52% 0%, 78% 18%, 100% 52%, 76% 88%, 46% 100%, 20% 82%, 0% 48%, 24% 16%);
-    box-shadow: 0 1px 0 rgba(255, 245, 245, 0.18);
-    opacity: 0.5;
-    transform: rotate(18deg);
-    mix-blend-mode: multiply;
-    animation-name: petalFall;
-    animation-timing-function: linear;
-    animation-iteration-count: infinite;
-  }
-  .petal::after {
-    content: '';
-    position: absolute;
-    inset: 22% 26% 26% 22%;
-    clip-path: polygon(16% 50%, 40% 14%, 74% 26%, 86% 56%, 60% 84%, 28% 76%);
-    background: rgba(255, 240, 240, 0.22);
-    transform: rotate(-12deg);
-  }
-  @keyframes petalFall {
-    0% {
-      transform: translate3d(0, -10vh, 0) rotate(0deg) scale(0.9);
-      opacity: 0;
-    }
-    12% { opacity: 0.45; }
-    50% {
-      transform: translate3d(2.4vw, 48vh, 0) rotate(110deg) scale(0.96);
-      opacity: 0.52;
-    }
-    100% {
-      transform: translate3d(-3.8vw, 112vh, 0) rotate(220deg) scale(0.9);
-      opacity: 0;
-    }
-  }
-  .polaroid-tray {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 260ms ease;
-  }
-  .polaroid-tray.is-visible {
-    opacity: 1;
-    pointer-events: auto;
-  }
-  .polaroid {
-    position: absolute;
-    width: var(--card-width, 246px);
-    height: var(--card-height, 296px);
-    transform-origin: center bottom;
-    transition: opacity 240ms ease;
-    transition-delay: var(--delay, 0ms);
-    opacity: 0;
-    perspective: 1200px;
-    pointer-events: auto;
-    touch-action: none;
-    cursor: grab;
-    user-select: none;
-  }
-  .polaroid.is-dragging { cursor: grabbing; }
-  .polaroid-tray.is-visible .polaroid {
-    opacity: 1;
-    animation: polaroidPop 560ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-    animation-delay: var(--delay, 0ms);
-  }
-  .polaroid-face {
-    position: absolute;
-    inset: 0;
-    padding: 12px;
-    background: #fffdf9;
-    border-radius: 4px;
-    box-shadow: 0 22px 44px rgba(77, 59, 40, 0.24);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-  }
-  .polaroid-photo {
-    width: 100%;
-    height: 100%;
-    border-radius: 1px;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0)),
-      var(--photo, linear-gradient(135deg, #d8d8d8, #b2b2b2));
-    background-size: cover;
-    background-position: center;
-  }
-  @keyframes polaroidPop {
-    0% {
-      transform: translateY(180px) rotate(var(--start-angle, 0deg)) scale(0.96);
-    }
-    65% {
-      transform: translateY(-8px) rotate(var(--overshoot-angle, 0deg)) scale(1.01);
-    }
-    100% {
-      transform: translateY(0) rotate(var(--settle-angle, 0deg)) scale(1);
-    }
-  }
-</style>
-</head>
-<body>
-<div class="polaroid-layer" id="polaroid-layer"></div>
-<div class="petal-layer" id="petal-layer"></div>
-<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
-<script>
-(function () {
-  var polaroidLayer = document.getElementById('polaroid-layer');
-  var petalLayer = document.getElementById('petal-layer');
-  var raycaster = new THREE.Raycaster();
-  var pointer = new THREE.Vector2(-10, -10);
-  var activeLandmark = null;
-  var hoveredLandmark = null;
-  var pressedKeys = {};
-  var viewBounds = {
-    minX: 0,
-    maxX: 0,
-    minY: 0,
-    maxY: 0
-  };
-  var lastFrameTime = performance.now();
-  var hasAppliedInitialView = false;
-  var landmarkZones = [
-    { key: 'meiji', x: 0.315, y: 0.275, radius: 0.19 },
-    { key: 'scramble', x: 0.515, y: 0.695, radius: 0.2 },
-    { key: 'sensoji', x: 0.55, y: 0.49, radius: 0.13 },
-    { key: 'cat', x: 0.66, y: 0.36, radius: 0.13 }
-  ];
-  var landmarkCards = {
-    meiji: [
-      { label: 'Meiji Jingu Gate', angle: -12, left: '18%', top: '64px', photo: 'url("assets/meiji-photo-1.png")' },
-      { label: 'Shrine Courtyard', angle: -3, left: '34%', top: '30px', photo: 'url("assets/meiji-photo-2.png")' },
-      { label: 'Bridge by Canal', angle: 9, left: '50%', top: '58px', photo: 'url("assets/meiji-photo-3.png")' }
-    ],
-    scramble: [
-      { label: 'Takeshita Street', angle: -11, left: '18%', top: '62px', photo: 'url("assets/scramble-photo-1.png")' },
-      { label: 'teamLab', angle: 0, left: '34%', top: '28px', photo: 'url("assets/scramble-photo-2.png")' },
-      { label: 'Temple View', angle: 12, left: '50%', top: '56px', photo: 'url("assets/scramble-photo-3.png")' }
-    ],
-    sensoji: [
-      { label: 'Senso-ji Gate', angle: -11, left: '12%', top: '58px', photo: 'url("assets/senso-photo-1.png")' },
-      { label: 'Temple Walk', angle: -2, left: '28%', top: '26px', photo: 'url("assets/senso-photo-2.png")' },
-      { label: 'Lantern Detail', angle: 7, left: '44%', top: '54px', photo: 'url("assets/senso-photo-3.png")' },
-      { label: 'Kaminarimon', angle: 13, left: '60%', top: '34px', photo: 'url("assets/senso-photo-4.png")' }
-    ],
-    cat: [
-      { label: 'Tokyo Tower Signs', angle: -8, left: '23%', top: '48px', photo: 'url("assets/cat-photo-1.png")' },
-      { label: 'Shinjuku Cat Billboard', angle: 9, left: '43%', top: '34px', photo: 'url("assets/cat-photo-2.png")' }
-    ]
-  };
-  var polaroidTray = document.createElement('div');
-  polaroidTray.className = 'polaroid-tray';
-  polaroidLayer.appendChild(polaroidTray);
-  var dragState = null;
-  var audioContext = null;
-
-  function getAudioContext() {
-    if (!audioContext) {
-      var AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextCtor) {
-        return null;
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tokyo Sunset Diorama</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Homemade+Apple&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
       }
-      audioContext = new AudioContextCtor();
-    }
-
-    if (audioContext.state === 'suspended') {
-      audioContext.resume();
-    }
-
-    return audioContext;
-  }
-
-  function playPaperSound() {
-    var context = getAudioContext();
-    if (!context) {
-      return;
-    }
-
-    var now = context.currentTime;
-    var bufferSize = context.sampleRate * 0.14;
-    var noiseBuffer = context.createBuffer(1, bufferSize, context.sampleRate);
-    var data = noiseBuffer.getChannelData(0);
-    for (var i = 0; i < bufferSize; i += 1) {
-      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
-    }
-
-    var source = context.createBufferSource();
-    source.buffer = noiseBuffer;
-
-    var filter = context.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(1800, now);
-    filter.Q.setValueAtTime(0.9, now);
-
-    var gain = context.createGain();
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(0.05, now + 0.018);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-
-    source.connect(filter);
-    filter.connect(gain);
-    gain.connect(context.destination);
-
-    source.start(now);
-    source.stop(now + 0.18);
-  }
-
-  function enablePolaroidDragging(frame) {
-    frame.addEventListener('pointerdown', function (event) {
-      if (event.button !== 0) {
-        return;
+      html,
+      body {
+        height: 100%;
       }
-
-      event.stopPropagation();
-      dragState = {
-        frame: frame,
-        pointerId: event.pointerId,
-        offsetX: event.clientX - frame.offsetLeft,
-        offsetY: event.clientY - frame.offsetTop
-      };
-      frame.classList.add('is-dragging');
-      frame.style.zIndex = String(Date.now());
-      frame.setPointerCapture(event.pointerId);
-    });
-
-    frame.addEventListener('pointermove', function (event) {
-      if (!dragState || dragState.frame !== frame || dragState.pointerId !== event.pointerId) {
-        return;
+      body {
+        position: relative;
+        overflow: hidden;
+        background:
+          radial-gradient(
+            circle at 24% 20%,
+            rgba(255, 216, 176, 0.9) 0%,
+            rgba(255, 216, 176, 0) 34%
+          ),
+          radial-gradient(
+            circle at 78% 24%,
+            rgba(255, 230, 166, 0.68) 0%,
+            rgba(255, 230, 166, 0) 28%
+          ),
+          linear-gradient(180deg, #f4efe7 0%, #f2e1cb 52%, #eed4aa 100%);
       }
-
-      var nextLeft = event.clientX - dragState.offsetX;
-      var nextTop = event.clientY - dragState.offsetY;
-      var maxLeft = polaroidTray.clientWidth - frame.offsetWidth;
-      var maxTop = polaroidTray.clientHeight - frame.offsetHeight;
-
-      frame.style.left = Math.max(0, Math.min(maxLeft, nextLeft)) + 'px';
-      frame.style.top = Math.max(0, Math.min(maxTop, nextTop)) + 'px';
-    });
-
-    function releaseDrag(event) {
-      if (!dragState || dragState.frame !== frame || dragState.pointerId !== event.pointerId) {
-        return;
+      body.is-interactive-hover,
+      body.is-interactive-hover canvas {
+        cursor: pointer;
       }
-
-      frame.classList.remove('is-dragging');
-      frame.releasePointerCapture(event.pointerId);
-      dragState = null;
-    }
-
-    frame.addEventListener('pointerup', releaseDrag);
-    frame.addEventListener('pointercancel', releaseDrag);
-  }
-
-  function renderPolaroids(key) {
-    var cards = landmarkCards[key] || [];
-    polaroidTray.innerHTML = '';
-
-    for (var i = 0; i < cards.length; i += 1) {
-      var card = cards[i];
-      var frame = document.createElement('div');
-      var frontFace = document.createElement('div');
-      var photo = document.createElement('div');
-      var aspectVariants = [
-        { width: 214, height: 286 },
-        { width: 246, height: 296 },
-        { width: 268, height: 252 },
-        { width: 228, height: 316 },
-        { width: 258, height: 278 }
-      ];
-      var aspect = aspectVariants[(i + key.length) % aspectVariants.length];
-
-      frame.className = 'polaroid';
-      frontFace.className = 'polaroid-face polaroid-face--front';
-      photo.className = 'polaroid-photo';
-
-      frame.style.setProperty('--card-width', aspect.width + 'px');
-      frame.style.setProperty('--card-height', aspect.height + 'px');
-      frame.style.left = 'calc(50% - 270px + ' + (i * 120) + 'px)';
-      frame.style.top = Math.round(window.innerHeight * 0.46 + (i % 2) * 18) + 'px';
-      frame.style.setProperty('--angle', card.angle + 'deg');
-      frame.style.setProperty('--settle-angle', (card.angle + (Math.random() * 4 - 2)).toFixed(2) + 'deg');
-      frame.style.setProperty('--start-angle', (card.angle + (Math.random() * 10 - 5)).toFixed(2) + 'deg');
-      frame.style.setProperty('--overshoot-angle', (card.angle + (Math.random() * 12 - 6)).toFixed(2) + 'deg');
-      frame.style.setProperty('--delay', Math.round(i * 70 + Math.random() * 45) + 'ms');
-      frame.style.transform = 'translateY(180px) rotate(var(--start-angle)) scale(0.96)';
-      photo.style.setProperty('--photo', card.photo);
-
-      frontFace.appendChild(photo);
-      frame.appendChild(frontFace);
-      enablePolaroidDragging(frame);
-      polaroidTray.appendChild(frame);
-    }
-  }
-
-  function setActiveLandmark(key) {
-    if (activeLandmark === key) {
-      return;
-    }
-
-    activeLandmark = key;
-    if (!key) {
-      polaroidTray.classList.remove('is-visible');
-      return;
-    }
-
-    renderPolaroids(key);
-    playPaperSound();
-    polaroidTray.classList.remove('is-visible');
-    requestAnimationFrame(function () {
-      polaroidTray.classList.add('is-visible');
-    });
-  }
-
-  function spawnPetal(seed) {
-    var petal = document.createElement('div');
-    var duration = 14 + Math.random() * 10;
-    var delay = seed ? Math.random() * -duration : 0;
-    petal.className = 'petal';
-    petal.style.left = Math.random() * 100 + 'vw';
-    petal.style.animationDuration = duration + 's';
-    petal.style.animationDelay = delay + 's';
-    petal.style.opacity = (0.28 + Math.random() * 0.2).toFixed(2);
-    petal.style.width = 8 + Math.random() * 8 + 'px';
-    petal.style.height = 7 + Math.random() * 7 + 'px';
-    petal.style.filter = 'blur(' + (Math.random() * 0.3).toFixed(2) + 'px)';
-    petalLayer.appendChild(petal);
-
-    petal.addEventListener('animationiteration', function () {
-      petal.style.left = Math.random() * 100 + 'vw';
-    });
-  }
-
-  for (var i = 0; i < 12; i += 1) {
-    spawnPetal(true);
-  }
-
-  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.VSMShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.16;
-  renderer.outputEncoding = THREE.sRGBEncoding;
-  document.body.appendChild(renderer.domElement);
-
-  var scene = new THREE.Scene();
-
-  var aspect = window.innerWidth / window.innerHeight;
-  var camSize = 10;
-  var camera = new THREE.OrthographicCamera(
-    -camSize * aspect, camSize * aspect,
-    camSize, -camSize,
-    0.1, 100
-  );
-  camera.position.set(0, 0, 18);
-  camera.lookAt(0, 0, 0);
-
-  var controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 0, 0);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.1;
-  controls.enableRotate = false;
-  controls.enablePan = true;
-  controls.panSpeed = 0.9;
-  controls.screenSpacePanning = true;
-  controls.minZoom = 0.8;
-  controls.maxZoom = 3.6;
-  controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
-  controls.touches.ONE = THREE.TOUCH.PAN;
-  controls.update();
-
-  var hemi = new THREE.HemisphereLight(0xffd7a8, 0xb7c0c8, 0.42);
-  scene.add(hemi);
-
-  var sun = new THREE.DirectionalLight(0xffb45c, 2.1);
-  sun.position.set(-10, 6, 9);
-  sun.target.position.set(1.2, -0.8, 0);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 40;
-  sun.shadow.camera.left = -10;
-  sun.shadow.camera.right = 10;
-  sun.shadow.camera.top = 10;
-  sun.shadow.camera.bottom = -10;
-  sun.shadow.bias = -0.0002;
-  sun.shadow.normalBias = 0.02;
-  sun.shadow.radius = 6;
-  sun.shadow.blurSamples = 8;
-  scene.add(sun);
-  scene.add(sun.target);
-
-  var textureLoader = new THREE.TextureLoader();
-
-  var imagePlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(1, 1),
-    new THREE.MeshStandardMaterial({
-      color: 0xf2dcc4,
-      transparent: true,
-      alphaTest: 0.03,
-      side: THREE.DoubleSide,
-      roughness: 0.96,
-      metalness: 0.0,
-      emissive: 0x241406,
-      emissiveIntensity: 0.08
-    })
-  );
-  imagePlane.castShadow = true;
-  imagePlane.receiveShadow = false;
-  scene.add(imagePlane);
-
-  var shadowPad = new THREE.Mesh(
-    new THREE.CircleGeometry(5.8, 48),
-    new THREE.ShadowMaterial({ opacity: 0.32 })
-  );
-  shadowPad.rotation.x = -Math.PI / 2;
-  shadowPad.scale.set(1.18, 0.72, 1);
-  shadowPad.position.set(0.85, -5.05, -0.15);
-  shadowPad.receiveShadow = true;
-  scene.add(shadowPad);
-
-  var sceneTexture = textureLoader.load('assets/main-scene.png?v=20260423-1046', function () {
-    sceneTexture.encoding = THREE.sRGBEncoding;
-    var aspectRatio = sceneTexture.image.width / sceneTexture.image.height;
-    var displayHeight = 14;
-    imagePlane.scale.set(displayHeight * aspectRatio, displayHeight, 1);
-    updateViewBounds();
-    applyInitialView();
-  });
-  sceneTexture.encoding = THREE.sRGBEncoding;
-  imagePlane.material.map = sceneTexture;
-  imagePlane.material.needsUpdate = true;
-  imagePlane.position.set(0, 0, 0);
-
-  function updateViewBounds() {
-    if (!imagePlane.scale.x || !imagePlane.scale.y) {
-      return;
-    }
-
-    var visibleWidth = (camera.right - camera.left) / camera.zoom;
-    var visibleHeight = (camera.top - camera.bottom) / camera.zoom;
-    var halfContentWidth = imagePlane.scale.x * 0.5;
-    var halfContentHeight = imagePlane.scale.y * 0.5;
-
-    viewBounds.minX = Math.min(0, visibleWidth * 0.5 - halfContentWidth);
-    viewBounds.maxX = Math.max(0, halfContentWidth - visibleWidth * 0.5);
-    viewBounds.minY = Math.min(0, visibleHeight * 0.5 - halfContentHeight);
-    viewBounds.maxY = Math.max(0, halfContentHeight - visibleHeight * 0.5);
-  }
-
-  function clampCameraToBounds() {
-    controls.target.x = THREE.MathUtils.clamp(controls.target.x, viewBounds.minX, viewBounds.maxX);
-    controls.target.y = THREE.MathUtils.clamp(controls.target.y, viewBounds.minY, viewBounds.maxY);
-    camera.position.x = THREE.MathUtils.clamp(camera.position.x, viewBounds.minX, viewBounds.maxX);
-    camera.position.y = THREE.MathUtils.clamp(camera.position.y, viewBounds.minY, viewBounds.maxY);
-  }
-
-  function applyInitialView() {
-    if (hasAppliedInitialView || !imagePlane.scale.x || !imagePlane.scale.y) {
-      return;
-    }
-
-    var fitZoomX = (camera.right - camera.left) / imagePlane.scale.x;
-    var fitZoomY = (camera.top - camera.bottom) / imagePlane.scale.y;
-    var coverZoom = Math.max(fitZoomX, fitZoomY) * 1.14;
-
-    camera.zoom = THREE.MathUtils.clamp(coverZoom, controls.minZoom, controls.maxZoom);
-    camera.updateProjectionMatrix();
-    updateViewBounds();
-
-    controls.target.set(-0.55, 0.3, 0);
-    camera.position.set(-0.55, 0.3, 18);
-    clampCameraToBounds();
-    controls.update();
-    hasAppliedInitialView = true;
-  }
-
-  function getHoveredLandmark(uv) {
-    var bestMatch = null;
-    var bestDistance = Infinity;
-
-    for (var i = 0; i < landmarkZones.length; i += 1) {
-      var zone = landmarkZones[i];
-      var dx = uv.x - zone.x;
-      var dy = uv.y - zone.y;
-      var distance = Math.sqrt(dx * dx + dy * dy);
-
-      if (distance < zone.radius && distance < bestDistance) {
-        bestMatch = zone.key;
-        bestDistance = distance;
+      .polaroid-layer,
+      .petal-layer {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
       }
-    }
+      .polaroid-layer {
+        z-index: 4;
+      }
+      .petal-layer {
+        z-index: 5;
+      }
+      canvas {
+        position: relative;
+        z-index: 1;
+        display: block;
+        filter: saturate(1.14) brightness(0.93) contrast(1.04);
+      }
+      .petal {
+        position: absolute;
+        top: -12vh;
+        width: 12px;
+        height: 10px;
+        background: linear-gradient(
+          145deg,
+          rgba(244, 214, 218, 0.84) 0%,
+          rgba(233, 187, 196, 0.82) 58%,
+          rgba(214, 166, 176, 0.8) 100%
+        );
+        clip-path: polygon(
+          52% 0%,
+          78% 18%,
+          100% 52%,
+          76% 88%,
+          46% 100%,
+          20% 82%,
+          0% 48%,
+          24% 16%
+        );
+        box-shadow: 0 1px 0 rgba(255, 245, 245, 0.18);
+        opacity: 0.5;
+        transform: rotate(18deg);
+        mix-blend-mode: multiply;
+        animation-name: petalFall;
+        animation-timing-function: linear;
+        animation-iteration-count: infinite;
+      }
+      .petal::after {
+        content: "";
+        position: absolute;
+        inset: 22% 26% 26% 22%;
+        clip-path: polygon(
+          16% 50%,
+          40% 14%,
+          74% 26%,
+          86% 56%,
+          60% 84%,
+          28% 76%
+        );
+        background: rgba(255, 240, 240, 0.22);
+        transform: rotate(-12deg);
+      }
+      @keyframes petalFall {
+        0% {
+          transform: translate3d(0, -10vh, 0) rotate(0deg) scale(0.9);
+          opacity: 0;
+        }
+        12% {
+          opacity: 0.45;
+        }
+        50% {
+          transform: translate3d(2.4vw, 48vh, 0) rotate(110deg) scale(0.96);
+          opacity: 0.52;
+        }
+        100% {
+          transform: translate3d(-3.8vw, 112vh, 0) rotate(220deg) scale(0.9);
+          opacity: 0;
+        }
+      }
+      .polaroid-tray {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 260ms ease;
+      }
+      .polaroid-tray.is-visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .polaroid {
+        position: absolute;
+        width: var(--card-width, 246px);
+        height: var(--card-height, 296px);
+        transform-origin: center bottom;
+        transition: opacity 240ms ease;
+        transition-delay: var(--delay, 0ms);
+        opacity: 0;
+        perspective: 1200px;
+        pointer-events: auto;
+        touch-action: none;
+        cursor: grab;
+        user-select: none;
+      }
+      .polaroid.is-dragging {
+        cursor: grabbing;
+      }
+      .polaroid-tray.is-visible .polaroid {
+        opacity: 1;
+        animation: polaroidPop 560ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        animation-delay: var(--delay, 0ms);
+      }
+      .polaroid-face {
+        position: absolute;
+        inset: 0;
+        padding: 12px;
+        background: #fffdf9;
+        border-radius: 4px;
+        box-shadow: 0 22px 44px rgba(77, 59, 40, 0.24);
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+      }
+      .polaroid-photo {
+        width: 100%;
+        height: 100%;
+        border-radius: 1px;
+        background:
+          linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.22),
+            rgba(255, 255, 255, 0)
+          ),
+          var(--photo, linear-gradient(135deg, #d8d8d8, #b2b2b2));
+        background-size: cover;
+        background-position: center;
+      }
+      @keyframes polaroidPop {
+        0% {
+          transform: translateY(180px) rotate(var(--start-angle, 0deg))
+            scale(0.96);
+        }
+        65% {
+          transform: translateY(-8px) rotate(var(--overshoot-angle, 0deg))
+            scale(1.01);
+        }
+        100% {
+          transform: translateY(0) rotate(var(--settle-angle, 0deg)) scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="polaroid-layer" id="polaroid-layer"></div>
+    <div class="petal-layer" id="petal-layer"></div>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+      (function () {
+        var polaroidLayer = document.getElementById("polaroid-layer");
+        var petalLayer = document.getElementById("petal-layer");
+        var raycaster = new THREE.Raycaster();
+        var pointer = new THREE.Vector2(-10, -10);
+        var activeLandmark = null;
+        var hoveredLandmark = null;
+        var pressedKeys = {};
+        var viewBounds = {
+          minX: 0,
+          maxX: 0,
+          minY: 0,
+          maxY: 0,
+        };
+        var lastFrameTime = performance.now();
+        var hasAppliedInitialView = false;
+        var landmarkZones = [
+          { key: "meiji", x: 0.315, y: 0.275, radius: 0.19 },
+          { key: "scramble", x: 0.515, y: 0.695, radius: 0.2 },
+          { key: "sensoji", x: 0.55, y: 0.49, radius: 0.13 },
+          { key: "cat", x: 0.66, y: 0.36, radius: 0.13 },
+        ];
+        var landmarkCards = {
+          meiji: [
+            {
+              label: "Meiji Jingu Gate",
+              angle: -12,
+              left: "18%",
+              top: "64px",
+              photo: 'url("assets/meiji-photo-1.png")',
+            },
+            {
+              label: "Shrine Courtyard",
+              angle: -3,
+              left: "34%",
+              top: "30px",
+              photo: 'url("assets/meiji-photo-2.png")',
+            },
+            {
+              label: "Bridge by Canal",
+              angle: 9,
+              left: "50%",
+              top: "58px",
+              photo: 'url("assets/meiji-photo-3.png")',
+            },
+          ],
+          scramble: [
+            {
+              label: "Takeshita Street",
+              angle: -11,
+              left: "18%",
+              top: "62px",
+              photo: 'url("assets/scramble-photo-1.png")',
+            },
+            {
+              label: "teamLab",
+              angle: 0,
+              left: "34%",
+              top: "28px",
+              photo: 'url("assets/scramble-photo-2.png")',
+            },
+            {
+              label: "Temple View",
+              angle: 12,
+              left: "50%",
+              top: "56px",
+              photo: 'url("assets/scramble-photo-3.png")',
+            },
+          ],
+          sensoji: [
+            {
+              label: "Senso-ji Gate",
+              angle: -11,
+              left: "12%",
+              top: "58px",
+              photo: 'url("assets/senso-photo-1.png")',
+            },
+            {
+              label: "Temple Walk",
+              angle: -2,
+              left: "28%",
+              top: "26px",
+              photo: 'url("assets/senso-photo-2.png")',
+            },
+            {
+              label: "Lantern Detail",
+              angle: 7,
+              left: "44%",
+              top: "54px",
+              photo: 'url("assets/senso-photo-3.png")',
+            },
+            {
+              label: "Kaminarimon",
+              angle: 13,
+              left: "60%",
+              top: "34px",
+              photo: 'url("assets/senso-photo-4.png")',
+            },
+          ],
+          cat: [
+            {
+              label: "Tokyo Tower Signs",
+              angle: -8,
+              left: "23%",
+              top: "48px",
+              photo: 'url("assets/cat-photo-1.png")',
+            },
+            {
+              label: "Shinjuku Cat Billboard",
+              angle: 9,
+              left: "43%",
+              top: "34px",
+              photo: 'url("assets/cat-photo-2.png")',
+            },
+          ],
+        };
+        var polaroidTray = document.createElement("div");
+        polaroidTray.className = "polaroid-tray";
+        polaroidLayer.appendChild(polaroidTray);
+        var dragState = null;
+        var audioContext = null;
 
-    if (bestMatch) {
-      return bestMatch;
-    }
+        function getAudioContext() {
+          if (!audioContext) {
+            var AudioContextCtor =
+              window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextCtor) {
+              return null;
+            }
+            audioContext = new AudioContextCtor();
+          }
 
-    return null;
-  }
+          if (audioContext.state === "suspended") {
+            audioContext.resume();
+          }
 
-  function updatePointer(event) {
-    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-  }
+          return audioContext;
+        }
 
-  renderer.domElement.addEventListener('pointermove', updatePointer);
-  renderer.domElement.addEventListener('pointerleave', function () {
-    pointer.set(-10, -10);
-    hoveredLandmark = null;
-    document.body.classList.remove('is-interactive-hover');
-  });
-  window.addEventListener('keydown', function (event) {
-    if (event.key.indexOf('Arrow') === 0) {
-      pressedKeys[event.key] = true;
-      event.preventDefault();
-    }
-  });
-  window.addEventListener('keyup', function (event) {
-    if (event.key.indexOf('Arrow') === 0) {
-      pressedKeys[event.key] = false;
-      event.preventDefault();
-    }
-  });
-  renderer.domElement.addEventListener('click', function () {
-    if (hoveredLandmark) {
-      setActiveLandmark(hoveredLandmark);
-      return;
-    }
+        function playPaperSound() {
+          var context = getAudioContext();
+          if (!context) {
+            return;
+          }
 
-    if (activeLandmark) {
-      setActiveLandmark(null);
-    }
-  });
-  polaroidTray.addEventListener('click', function (event) {
-    if (event.target === polaroidTray) {
-      setActiveLandmark(null);
-    }
-  });
+          var now = context.currentTime;
+          var bufferSize = context.sampleRate * 0.14;
+          var noiseBuffer = context.createBuffer(
+            1,
+            bufferSize,
+            context.sampleRate,
+          );
+          var data = noiseBuffer.getChannelData(0);
+          for (var i = 0; i < bufferSize; i += 1) {
+            data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+          }
 
-  window.addEventListener('resize', function () {
-    aspect = window.innerWidth / window.innerHeight;
-    camera.left = -camSize * aspect;
-    camera.right = camSize * aspect;
-    camera.top = camSize;
-    camera.bottom = -camSize;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    updateViewBounds();
-    if (hasAppliedInitialView) {
-      clampCameraToBounds();
-      controls.update();
-    } else {
-      applyInitialView();
-    }
-  });
+          var source = context.createBufferSource();
+          source.buffer = noiseBuffer;
 
-  function animate() {
-    requestAnimationFrame(animate);
-    var now = performance.now();
-    var delta = Math.min((now - lastFrameTime) / 1000, 0.05);
-    lastFrameTime = now;
+          var filter = context.createBiquadFilter();
+          filter.type = "bandpass";
+          filter.frequency.setValueAtTime(1800, now);
+          filter.Q.setValueAtTime(0.9, now);
 
-    var keyboardPanSpeed = 4.6 / camera.zoom;
-    var moveX = 0;
-    var moveY = 0;
+          var gain = context.createGain();
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.linearRampToValueAtTime(0.05, now + 0.018);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
 
-    if (pressedKeys.ArrowLeft) { moveX -= keyboardPanSpeed * delta; }
-    if (pressedKeys.ArrowRight) { moveX += keyboardPanSpeed * delta; }
-    if (pressedKeys.ArrowUp) { moveY += keyboardPanSpeed * delta; }
-    if (pressedKeys.ArrowDown) { moveY -= keyboardPanSpeed * delta; }
+          source.connect(filter);
+          filter.connect(gain);
+          gain.connect(context.destination);
 
-    if (moveX || moveY) {
-      controls.target.x += moveX;
-      controls.target.y += moveY;
-      camera.position.x += moveX;
-      camera.position.y += moveY;
-    }
+          source.start(now);
+          source.stop(now + 0.18);
+        }
 
-    controls.target.z = 0;
-    camera.position.z = 18;
-    updateViewBounds();
-    clampCameraToBounds();
+        function enablePolaroidDragging(frame) {
+          frame.addEventListener("pointerdown", function (event) {
+            if (event.button !== 0) {
+              return;
+            }
 
-    controls.update();
+            event.stopPropagation();
+            dragState = {
+              frame: frame,
+              pointerId: event.pointerId,
+              offsetX: event.clientX - frame.offsetLeft,
+              offsetY: event.clientY - frame.offsetTop,
+            };
+            frame.classList.add("is-dragging");
+            frame.style.zIndex = String(Date.now());
+            frame.setPointerCapture(event.pointerId);
+          });
 
-    raycaster.setFromCamera(pointer, camera);
-    var hits = raycaster.intersectObject(imagePlane);
-    hoveredLandmark = hits.length > 0 ? getHoveredLandmark(hits[0].uv) : null;
-    document.body.classList.toggle('is-interactive-hover', !!hoveredLandmark);
+          frame.addEventListener("pointermove", function (event) {
+            if (
+              !dragState ||
+              dragState.frame !== frame ||
+              dragState.pointerId !== event.pointerId
+            ) {
+              return;
+            }
 
-    renderer.render(scene, camera);
-  }
+            var nextLeft = event.clientX - dragState.offsetX;
+            var nextTop = event.clientY - dragState.offsetY;
+            var maxLeft = polaroidTray.clientWidth - frame.offsetWidth;
+            var maxTop = polaroidTray.clientHeight - frame.offsetHeight;
 
-  animate();
-})();
-</script>
-</body>
+            frame.style.left = Math.max(0, Math.min(maxLeft, nextLeft)) + "px";
+            frame.style.top = Math.max(0, Math.min(maxTop, nextTop)) + "px";
+          });
+
+          function releaseDrag(event) {
+            if (
+              !dragState ||
+              dragState.frame !== frame ||
+              dragState.pointerId !== event.pointerId
+            ) {
+              return;
+            }
+
+            frame.classList.remove("is-dragging");
+            frame.releasePointerCapture(event.pointerId);
+            dragState = null;
+          }
+
+          frame.addEventListener("pointerup", releaseDrag);
+          frame.addEventListener("pointercancel", releaseDrag);
+        }
+
+        function renderPolaroids(key) {
+          var cards = landmarkCards[key] || [];
+          polaroidTray.innerHTML = "";
+
+          for (var i = 0; i < cards.length; i += 1) {
+            var card = cards[i];
+            var frame = document.createElement("div");
+            var frontFace = document.createElement("div");
+            var photo = document.createElement("div");
+            var aspectVariants = [
+              { width: 214, height: 286 },
+              { width: 246, height: 296 },
+              { width: 268, height: 252 },
+              { width: 228, height: 316 },
+              { width: 258, height: 278 },
+            ];
+            var aspect =
+              aspectVariants[(i + key.length) % aspectVariants.length];
+
+            frame.className = "polaroid";
+            frontFace.className = "polaroid-face polaroid-face--front";
+            photo.className = "polaroid-photo";
+
+            frame.style.setProperty("--card-width", aspect.width + "px");
+            frame.style.setProperty("--card-height", aspect.height + "px");
+            frame.style.left = "calc(50% - 270px + " + i * 120 + "px)";
+            frame.style.top =
+              Math.round(window.innerHeight * 0.46 + (i % 2) * 18) + "px";
+            frame.style.setProperty("--angle", card.angle + "deg");
+            frame.style.setProperty(
+              "--settle-angle",
+              (card.angle + (Math.random() * 4 - 2)).toFixed(2) + "deg",
+            );
+            frame.style.setProperty(
+              "--start-angle",
+              (card.angle + (Math.random() * 10 - 5)).toFixed(2) + "deg",
+            );
+            frame.style.setProperty(
+              "--overshoot-angle",
+              (card.angle + (Math.random() * 12 - 6)).toFixed(2) + "deg",
+            );
+            frame.style.setProperty(
+              "--delay",
+              Math.round(i * 70 + Math.random() * 45) + "ms",
+            );
+            frame.style.transform =
+              "translateY(180px) rotate(var(--start-angle)) scale(0.96)";
+            photo.style.setProperty("--photo", card.photo);
+
+            frontFace.appendChild(photo);
+            frame.appendChild(frontFace);
+            enablePolaroidDragging(frame);
+            polaroidTray.appendChild(frame);
+          }
+        }
+
+        function setActiveLandmark(key) {
+          if (activeLandmark === key) {
+            return;
+          }
+
+          activeLandmark = key;
+          if (!key) {
+            polaroidTray.classList.remove("is-visible");
+            return;
+          }
+
+          renderPolaroids(key);
+          playPaperSound();
+          polaroidTray.classList.remove("is-visible");
+          requestAnimationFrame(function () {
+            polaroidTray.classList.add("is-visible");
+          });
+        }
+
+        function spawnPetal(seed) {
+          var petal = document.createElement("div");
+          var duration = 14 + Math.random() * 10;
+          var delay = seed ? Math.random() * -duration : 0;
+          petal.className = "petal";
+          petal.style.left = Math.random() * 100 + "vw";
+          petal.style.animationDuration = duration + "s";
+          petal.style.animationDelay = delay + "s";
+          petal.style.opacity = (0.28 + Math.random() * 0.2).toFixed(2);
+          petal.style.width = 8 + Math.random() * 8 + "px";
+          petal.style.height = 7 + Math.random() * 7 + "px";
+          petal.style.filter =
+            "blur(" + (Math.random() * 0.3).toFixed(2) + "px)";
+          petalLayer.appendChild(petal);
+
+          petal.addEventListener("animationiteration", function () {
+            petal.style.left = Math.random() * 100 + "vw";
+          });
+        }
+
+        for (var i = 0; i < 12; i += 1) {
+          spawnPetal(true);
+        }
+
+        var renderer = new THREE.WebGLRenderer({
+          antialias: true,
+          alpha: true,
+        });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.VSMShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.16;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        document.body.appendChild(renderer.domElement);
+
+        var scene = new THREE.Scene();
+
+        var aspect = window.innerWidth / window.innerHeight;
+        var camSize = 10;
+        var camera = new THREE.OrthographicCamera(
+          -camSize * aspect,
+          camSize * aspect,
+          camSize,
+          -camSize,
+          0.1,
+          100,
+        );
+        camera.position.set(0, 0, 18);
+        camera.lookAt(0, 0, 0);
+
+        var controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0, 0);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.1;
+        controls.enableRotate = false;
+        controls.enablePan = true;
+        controls.panSpeed = 0.9;
+        controls.screenSpacePanning = true;
+        controls.minZoom = 0.8;
+        controls.maxZoom = 3.6;
+        controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+        controls.touches.ONE = THREE.TOUCH.PAN;
+        controls.update();
+
+        var hemi = new THREE.HemisphereLight(0xffd7a8, 0xb7c0c8, 0.42);
+        scene.add(hemi);
+
+        var sun = new THREE.DirectionalLight(0xffb45c, 2.1);
+        sun.position.set(-10, 6, 9);
+        sun.target.position.set(1.2, -0.8, 0);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(2048, 2048);
+        sun.shadow.camera.near = 1;
+        sun.shadow.camera.far = 40;
+        sun.shadow.camera.left = -10;
+        sun.shadow.camera.right = 10;
+        sun.shadow.camera.top = 10;
+        sun.shadow.camera.bottom = -10;
+        sun.shadow.bias = -0.0002;
+        sun.shadow.normalBias = 0.02;
+        sun.shadow.radius = 6;
+        sun.shadow.blurSamples = 8;
+        scene.add(sun);
+        scene.add(sun.target);
+
+        var textureLoader = new THREE.TextureLoader();
+
+        var imagePlane = new THREE.Mesh(
+          new THREE.PlaneGeometry(1, 1),
+          new THREE.MeshStandardMaterial({
+            color: 0xf2dcc4,
+            transparent: true,
+            alphaTest: 0.03,
+            side: THREE.DoubleSide,
+            roughness: 0.96,
+            metalness: 0.0,
+            emissive: 0x241406,
+            emissiveIntensity: 0.08,
+          }),
+        );
+        imagePlane.castShadow = true;
+        imagePlane.receiveShadow = false;
+        scene.add(imagePlane);
+
+        var shadowPad = new THREE.Mesh(
+          new THREE.CircleGeometry(5.8, 48),
+          new THREE.ShadowMaterial({ opacity: 0.32 }),
+        );
+        shadowPad.rotation.x = -Math.PI / 2;
+        shadowPad.scale.set(1.18, 0.72, 1);
+        shadowPad.position.set(0.85, -5.05, -0.15);
+        shadowPad.receiveShadow = true;
+        scene.add(shadowPad);
+
+        var sceneTexture = textureLoader.load(
+          "assets/main-scene.png?v=20260423-1046",
+          function () {
+            sceneTexture.encoding = THREE.sRGBEncoding;
+            var aspectRatio =
+              sceneTexture.image.width / sceneTexture.image.height;
+            var displayHeight = 14;
+            imagePlane.scale.set(displayHeight * aspectRatio, displayHeight, 1);
+            updateViewBounds();
+            applyInitialView();
+          },
+        );
+        sceneTexture.encoding = THREE.sRGBEncoding;
+        imagePlane.material.map = sceneTexture;
+        imagePlane.material.needsUpdate = true;
+        imagePlane.position.set(0, 0, 0);
+
+        function updateViewBounds() {
+          if (!imagePlane.scale.x || !imagePlane.scale.y) {
+            return;
+          }
+
+          var visibleWidth = (camera.right - camera.left) / camera.zoom;
+          var visibleHeight = (camera.top - camera.bottom) / camera.zoom;
+          var halfContentWidth = imagePlane.scale.x * 0.5;
+          var halfContentHeight = imagePlane.scale.y * 0.5;
+
+          viewBounds.minX = Math.min(0, visibleWidth * 0.5 - halfContentWidth);
+          viewBounds.maxX = Math.max(0, halfContentWidth - visibleWidth * 0.5);
+          viewBounds.minY = Math.min(
+            0,
+            visibleHeight * 0.5 - halfContentHeight,
+          );
+          viewBounds.maxY = Math.max(
+            0,
+            halfContentHeight - visibleHeight * 0.5,
+          );
+        }
+
+        function clampCameraToBounds() {
+          controls.target.x = THREE.MathUtils.clamp(
+            controls.target.x,
+            viewBounds.minX,
+            viewBounds.maxX,
+          );
+          controls.target.y = THREE.MathUtils.clamp(
+            controls.target.y,
+            viewBounds.minY,
+            viewBounds.maxY,
+          );
+          camera.position.x = THREE.MathUtils.clamp(
+            camera.position.x,
+            viewBounds.minX,
+            viewBounds.maxX,
+          );
+          camera.position.y = THREE.MathUtils.clamp(
+            camera.position.y,
+            viewBounds.minY,
+            viewBounds.maxY,
+          );
+        }
+
+        function applyInitialView() {
+          if (
+            hasAppliedInitialView ||
+            !imagePlane.scale.x ||
+            !imagePlane.scale.y
+          ) {
+            return;
+          }
+
+          var fitZoomX = (camera.right - camera.left) / imagePlane.scale.x;
+          var fitZoomY = (camera.top - camera.bottom) / imagePlane.scale.y;
+          var coverZoom = Math.max(fitZoomX, fitZoomY) * 1.14;
+
+          camera.zoom = THREE.MathUtils.clamp(
+            coverZoom,
+            controls.minZoom,
+            controls.maxZoom,
+          );
+          camera.updateProjectionMatrix();
+          updateViewBounds();
+
+          controls.target.set(-0.55, 0.3, 0);
+          camera.position.set(-0.55, 0.3, 18);
+          clampCameraToBounds();
+          controls.update();
+          hasAppliedInitialView = true;
+        }
+
+        function getHoveredLandmark(uv) {
+          var bestMatch = null;
+          var bestDistance = Infinity;
+
+          for (var i = 0; i < landmarkZones.length; i += 1) {
+            var zone = landmarkZones[i];
+            var dx = uv.x - zone.x;
+            var dy = uv.y - zone.y;
+            var distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < zone.radius && distance < bestDistance) {
+              bestMatch = zone.key;
+              bestDistance = distance;
+            }
+          }
+
+          if (bestMatch) {
+            return bestMatch;
+          }
+
+          return null;
+        }
+
+        function updatePointer(event) {
+          pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+          pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        renderer.domElement.addEventListener("pointermove", updatePointer);
+        renderer.domElement.addEventListener("pointerleave", function () {
+          pointer.set(-10, -10);
+          hoveredLandmark = null;
+          document.body.classList.remove("is-interactive-hover");
+        });
+        window.addEventListener("keydown", function (event) {
+          if (event.key.indexOf("Arrow") === 0) {
+            pressedKeys[event.key] = true;
+            event.preventDefault();
+          }
+        });
+        window.addEventListener("keyup", function (event) {
+          if (event.key.indexOf("Arrow") === 0) {
+            pressedKeys[event.key] = false;
+            event.preventDefault();
+          }
+        });
+        renderer.domElement.addEventListener("click", function () {
+          if (hoveredLandmark) {
+            setActiveLandmark(hoveredLandmark);
+            return;
+          }
+
+          if (activeLandmark) {
+            setActiveLandmark(null);
+          }
+        });
+        polaroidTray.addEventListener("click", function (event) {
+          if (event.target === polaroidTray) {
+            setActiveLandmark(null);
+          }
+        });
+
+        window.addEventListener("resize", function () {
+          aspect = window.innerWidth / window.innerHeight;
+          camera.left = -camSize * aspect;
+          camera.right = camSize * aspect;
+          camera.top = camSize;
+          camera.bottom = -camSize;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+          updateViewBounds();
+          if (hasAppliedInitialView) {
+            clampCameraToBounds();
+            controls.update();
+          } else {
+            applyInitialView();
+          }
+        });
+
+        function animate() {
+          requestAnimationFrame(animate);
+          var now = performance.now();
+          var delta = Math.min((now - lastFrameTime) / 1000, 0.05);
+          lastFrameTime = now;
+
+          var keyboardPanSpeed = 4.6 / camera.zoom;
+          var moveX = 0;
+          var moveY = 0;
+
+          if (pressedKeys.ArrowLeft) {
+            moveX -= keyboardPanSpeed * delta;
+          }
+          if (pressedKeys.ArrowRight) {
+            moveX += keyboardPanSpeed * delta;
+          }
+          if (pressedKeys.ArrowUp) {
+            moveY += keyboardPanSpeed * delta;
+          }
+          if (pressedKeys.ArrowDown) {
+            moveY -= keyboardPanSpeed * delta;
+          }
+
+          if (moveX || moveY) {
+            controls.target.x += moveX;
+            controls.target.y += moveY;
+            camera.position.x += moveX;
+            camera.position.y += moveY;
+          }
+
+          controls.target.z = 0;
+          camera.position.z = 18;
+          updateViewBounds();
+          clampCameraToBounds();
+
+          controls.update();
+
+          raycaster.setFromCamera(pointer, camera);
+          var hits = raycaster.intersectObject(imagePlane);
+          hoveredLandmark =
+            hits.length > 0 ? getHoveredLandmark(hits[0].uv) : null;
+          document.body.classList.toggle(
+            "is-interactive-hover",
+            !!hoveredLandmark,
+          );
+
+          renderer.render(scene, camera);
+        }
+
+        animate();
+      })();
+    </script>
+  </body>
 </html>
