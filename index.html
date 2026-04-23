@@ -193,6 +193,58 @@
   polaroidTray.className = 'polaroid-tray';
   polaroidLayer.appendChild(polaroidTray);
   var dragState = null;
+  var audioContext = null;
+
+  function getAudioContext() {
+    if (!audioContext) {
+      var AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) {
+        return null;
+      }
+      audioContext = new AudioContextCtor();
+    }
+
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+
+    return audioContext;
+  }
+
+  function playPaperSound() {
+    var context = getAudioContext();
+    if (!context) {
+      return;
+    }
+
+    var now = context.currentTime;
+    var bufferSize = context.sampleRate * 0.14;
+    var noiseBuffer = context.createBuffer(1, bufferSize, context.sampleRate);
+    var data = noiseBuffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i += 1) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
+
+    var source = context.createBufferSource();
+    source.buffer = noiseBuffer;
+
+    var filter = context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1800, now);
+    filter.Q.setValueAtTime(0.9, now);
+
+    var gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.05, now + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(context.destination);
+
+    source.start(now);
+    source.stop(now + 0.18);
+  }
 
   function enablePolaroidDragging(frame) {
     frame.addEventListener('pointerdown', function (event) {
@@ -293,6 +345,7 @@
     }
 
     renderPolaroids(key);
+    playPaperSound();
     polaroidTray.classList.remove('is-visible');
     requestAnimationFrame(function () {
       polaroidTray.classList.add('is-visible');
