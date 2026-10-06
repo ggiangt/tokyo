@@ -246,18 +246,19 @@
 
     route.innerHTML = "";
     if (mode !== "all" || visited.length < 2) return;
-    var box = grid.getBoundingClientRect();
-    route.setAttribute("width", box.width);
-    route.setAttribute("height", box.height);
-    route.setAttribute("viewBox", "0 0 " + box.width + " " + box.height);
+    // Layout positions (offsets), so tiles mid-animation don't skew the line.
+    var width = grid.offsetWidth;
+    var height = grid.offsetHeight;
+    route.setAttribute("width", width);
+    route.setAttribute("height", height);
+    route.setAttribute("viewBox", "0 0 " + width + " " + height);
 
     var points = visited.map(function (city) {
-      var art = tiles[cities.indexOf(city)]
-        .querySelector(".city-art")
-        .getBoundingClientRect();
+      var tile = tiles[cities.indexOf(city)];
+      var art = tile.querySelector(".city-art");
       return {
-        x: art.left - box.left + art.width / 2,
-        y: art.top - box.top + art.height / 2,
+        x: tile.offsetLeft + art.offsetLeft + art.offsetWidth / 2,
+        y: tile.offsetTop + art.offsetTop + art.offsetHeight / 2,
       };
     });
     // Gentle arcs between stops, bowing upward like a flight path.
@@ -276,9 +277,23 @@
     route.appendChild(path);
   }
 
+  var switchTimer = null;
+
   function setMode(next, remember) {
+    var previous = mode;
     mode = next === "all" ? "all" : "one";
     root.classList.toggle("is-grid", mode === "all");
+    root.querySelector(".view-switch").dataset.mode = mode;
+    // When the user switches, the new view springs in (tiles one by one).
+    if (remember && previous !== mode) {
+      root.classList.remove("is-switching");
+      void root.offsetWidth;
+      root.classList.add("is-switching");
+      clearTimeout(switchTimer);
+      switchTimer = setTimeout(function () {
+        root.classList.remove("is-switching");
+      }, 900);
+    }
     viewButtons.forEach(function (button) {
       var on = button.dataset.view === mode;
       button.classList.toggle("is-active", on);
@@ -354,6 +369,7 @@
 
         var tile = buildCard(cities[i], i);
         tile.classList.add("city-card--tile");
+        tile.style.setProperty("--i", String(i));
         tile.querySelector(".city-art").tabIndex = 0;
         grid.appendChild(tile);
         tiles.push(tile);
@@ -381,6 +397,10 @@
         saved = localStorage.getItem("gallery-view") || "one";
       } catch (error) {}
       setMode(saved, false);
+      // Only animate the switch's pill after the first paint.
+      requestAnimationFrame(function () {
+        root.querySelector(".view-switch").classList.add("is-ready");
+      });
     },
     update: function () {
       for (var i = 0; i < cards.length; i += 1) {
