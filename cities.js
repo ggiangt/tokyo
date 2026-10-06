@@ -5,7 +5,8 @@
 //   name      - shown in the gallery
 //   unlocked  - true if the city is open from the start
 //   center    - real-world centre { lat, lng }
-//   radiusKm  - photos taken within this distance of the centre belong here
+//   radiusKm  - photos taken within this distance of the centre belong here.
+//               Kept generous so day trips count too (Nara goes to Kyoto).
 //   gallery   - small image shown on the home screen
 //   map       - full-size artwork used for the zoomable diorama
 //   mapView   - where the camera starts on the map (world units, 0,0 = centre)
@@ -20,7 +21,7 @@ window.CITIES = [
     name: "Tokyo",
     unlocked: true,
     center: { lat: 35.6812, lng: 139.7671 },
-    radiusKm: 40,
+    radiusKm: 80,
     gallery: "assets/cities/tokyo.webp",
     map: "assets/main-scene.png?v=20260423-1046",
     mapView: { x: -0.55, y: 0.3 },
@@ -72,7 +73,7 @@ window.CITIES = [
     name: "Kyoto",
     unlocked: false,
     center: { lat: 35.0116, lng: 135.7681 },
-    radiusKm: 15,
+    radiusKm: 60,
     gallery: "assets/cities/kyoto.webp",
     map: "assets/cities/kyoto.webp",
     mapView: { x: 0, y: 0 },
@@ -134,7 +135,7 @@ window.CITIES = [
     name: "Lisbon",
     unlocked: false,
     center: { lat: 38.7223, lng: -9.1393 },
-    radiusKm: 20,
+    radiusKm: 50,
     gallery: "assets/cities/lisbon.webp",
     map: "assets/cities/lisbon.webp",
     mapView: { x: 0, y: 0 },
@@ -145,7 +146,7 @@ window.CITIES = [
     name: "San Francisco",
     unlocked: false,
     center: { lat: 37.7749, lng: -122.4194 },
-    radiusKm: 15,
+    radiusKm: 60,
     gallery: "assets/cities/san-francisco.webp",
     map: "assets/cities/san-francisco.webp",
     mapView: { x: 0, y: 0 },

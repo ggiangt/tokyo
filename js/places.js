@@ -1,8 +1,8 @@
 // Decides where a photo belongs, and names places that have no map.
 //   Places.locate(photo, cities) -> { kind: "landmark", city, landmark }
 //                                 | { kind: "city", city }
-//                                 | { kind: "elsewhere" }
-//                                 | { kind: "unplaced" }
+//                                 | { kind: "far" }      (no map there yet)
+//                                 | { kind: "unknown" }  (no location saved)
 //   Places.lookupName(lat, lng)  -> Promise of a place name (e.g. "Nara")
 (function () {
   function distanceM(lat1, lng1, lat2, lng2) {
@@ -33,7 +33,7 @@
   }
 
   function locate(photo, cities) {
-    if (photo.lat === null || photo.lng === null) return { kind: "unplaced" };
+    if (photo.lat === null || photo.lng === null) return { kind: "unknown" };
 
     var city = nearest(
       cities,
@@ -46,7 +46,7 @@
         return c.radiusKm * 1000;
       },
     );
-    if (!city) return { kind: "elsewhere" };
+    if (!city) return { kind: "far" };
 
     var landmark = nearest(
       city.landmarks || [],

@@ -2,8 +2,6 @@
 // new photos go.
 (function () {
   var backButton = document.getElementById("back-button");
-  var elsewhereChip = document.getElementById("tray-elsewhere");
-  var unplacedChip = document.getElementById("tray-unplaced");
 
   var cities = window.CITIES.map(function (city) {
     var copy = Object.assign({}, city);
@@ -11,8 +9,6 @@
     copy.photos = [];
     return copy;
   });
-  var elsewhere = [];
-  var unplaced = [];
   var newPhotoIds = {};
 
   function findCity(id) {
@@ -233,57 +229,35 @@
     Polaroids.hide();
   };
 
-  // ---- "Elsewhere" and "Couldn't place" trays -----------------------------
-
-  function updateTrays() {
-    elsewhereChip.hidden = !elsewhere.length;
-    elsewhereChip.textContent = "Elsewhere · " + elsewhere.length;
-    unplacedChip.hidden = !unplaced.length;
-    unplacedChip.textContent = "Couldn't place · " + unplaced.length;
-  }
-
-  elsewhereChip.addEventListener("click", function () {
-    Polaroids.show(
-      "tray:elsewhere:" + elsewhere.length,
-      toCards(elsewhere, function (photo) {
-        return photo.place ? photo.place.split(",")[0] : "…";
-      }),
-    );
-  });
-
-  unplacedChip.addEventListener("click", function () {
-    Polaroids.show(
-      "tray:unplaced:" + unplaced.length,
-      toCards(unplaced, function (photo) {
-        return formatDate(photo.takenAt) || "no location";
-      }),
-    );
-  });
-
   // ---- Placing new photos -------------------------------------------------
+
+  // Photos with no location, or from somewhere with no map yet, go to a
+  // random spot on one of the open maps.
+  function randomOpenCity() {
+    var open = cities.filter(function (city) {
+      return city.unlocked;
+    });
+    return open[Math.floor(Math.random() * open.length)];
+  }
 
   function placePhotos(photos) {
     var touched = [];
-    var newElsewhere = [];
-    var newUnplaced = [];
+    var far = [];
     var needSpots = [];
 
     photos.forEach(function (photo) {
       var where = Places.locate(photo, cities);
-      if (where.kind === "unplaced") {
-        newUnplaced.push(photo);
-        return;
-      }
-      if (where.kind === "elsewhere") {
-        newElsewhere.push(photo);
-        return;
+      var city = where.city;
+      if (where.kind === "far" || where.kind === "unknown") {
+        if (where.kind === "far") far.push(photo);
+        city = randomOpenCity();
       }
       photo.landmarkKey = where.landmark ? where.landmark.key : null;
       photo.spot = null;
-      where.city.photos.push(photo);
+      city.photos.push(photo);
       newPhotoIds[photo.id] = true;
-      if (touched.indexOf(where.city) < 0) touched.push(where.city);
-      if (!where.landmark) needSpots.push({ photo: photo, city: where.city });
+      if (touched.indexOf(city) < 0) touched.push(city);
+      if (!where.landmark) needSpots.push({ photo: photo, city: city });
     });
 
     // Random spots one at a time, so photos don't pile on the same place.
@@ -303,27 +277,21 @@
     }, Promise.resolve());
 
     return spotsDone.then(function () {
-      return {
-        cities: touched,
-        elsewhere: newElsewhere,
-        unplaced: newUnplaced,
-      };
+      return { cities: touched, far: far };
     });
   }
 
-  function nameElsewhere(photos) {
+  // "This is from Paris, France. That map doesn't exist yet."
+  function announceFarPlaces(photos) {
     var groups = {};
     photos.forEach(function (photo) {
-      var key = photo.lat.toFixed(2) + "," + photo.lng.toFixed(2);
+      var key = photo.lat.toFixed(1) + "," + photo.lng.toFixed(1);
       (groups[key] = groups[key] || []).push(photo);
     });
 
     Object.keys(groups).forEach(function (key) {
-      var group = groups[key];
-      Places.lookupName(group[0].lat, group[0].lng).then(function (place) {
-        group.forEach(function (photo) {
-          photo.place = place;
-        });
+      var photo = groups[key][0];
+      Places.lookupName(photo.lat, photo.lng).then(function (place) {
         Notice.toast(
           "This is from " + place + ". That map doesn't exist yet.",
           { duration: 8000 },
@@ -341,19 +309,8 @@
     }
 
     return placePhotos(photos).then(function (result) {
-      elsewhere = elsewhere.concat(result.elsewhere);
-      unplaced = unplaced.concat(result.unplaced);
       Gallery.update();
-      updateTrays();
-
-      if (result.unplaced.length) {
-        Notice.toast(
-          "Couldn't place " +
-            plural(result.unplaced.length, "photo") +
-            ": no location saved in it.",
-        );
-      }
-      if (result.elsewhere.length) nameElsewhere(result.elsewhere);
+      if (result.far.length) announceFarPlaces(result.far);
 
       // Locked cities are unlocked in the next step; for now just say so.
       result.cities.forEach(function (city) {
@@ -384,7 +341,7 @@
     busy = isBusy;
     tripButton.disabled = isBusy;
     uploadLink.disabled = isBusy;
-    tripButton.textContent = isBusy ? "Reading photos…" : "Try with my trip";
+    tripButton.textContent = isBusy ? "Opening photos…" : "Try with my trip";
   }
 
   function addFiles(files) {
@@ -411,18 +368,28 @@
       });
   }
 
+  // "Try with my trip" opens a mock Photos window with the sample trip, so
+  // you still choose which photos to add.
   tripButton.addEventListener("click", function () {
     if (busy) return;
     setBusy(true);
     PhotoReader.loadSample()
-      .then(function (files) {
-        setBusy(false);
-        return addFiles(files);
+      .then(function (sample) {
+        return PhotoPicker.open({
+          album: sample.album,
+          files: sample.files,
+          isAdded: function (file) {
+            return !!seenPhotoIds[PhotoReader.idFor(file)];
+          },
+          onAdd: addFiles,
+        });
       })
       .catch(function (error) {
         console.error(error);
-        setBusy(false);
         Notice.toast("Couldn't load the sample trip.");
+      })
+      .then(function () {
+        setBusy(false);
       });
   });
 
@@ -438,7 +405,6 @@
   // ---- Start --------------------------------------------------------------
 
   Gallery.init(cities, { onOpen: openCity });
-  updateTrays();
   DioramaMap.preload(cities[0]);
   route();
 

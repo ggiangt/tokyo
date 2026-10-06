@@ -1,15 +1,18 @@
 {
-  "note": "Photos loaded by 'Try with my trip'. Add a file here after dropping it in this folder.",
+  "note": "Photos shown when you tap 'Try with my trip'. Add a file here after dropping it in this folder.",
+  "album": "Japan 2026",
   "photos": [
+    "kyoto-kinkakuji.jpg",
+    "kyoto-kiyomizu-stage.jpg",
+    "kyoto-kiyomizu-pagoda.jpg",
+    "nara-todaiji.jpg",
+    "ramen.jpg",
     "meiji-otorii.jpg",
     "meiji-sake-barrels.jpg",
     "meiji-inner-gate.jpg",
     "shinjuku-cat.jpg",
     "sensoji-hozomon.jpg",
     "sensoji-pagoda-selfie.jpg",
-    "akihabara-night.jpg",
-    "ramen.jpg",
-    "kyoto-kinkakuji.jpg",
-    "nara-todaiji.jpg"
+    "akihabara-night.jpg"
   ]
 }

@@ -1,13 +1,18 @@
 // Reads location + date from photos. Uploads and the sample trip both end up
 // in PhotoReader.read(files), so they go through exactly the same logic.
 //   PhotoReader.read(files)   -> Promise of [{ id, name, url, lat, lng, takenAt }]
-//   PhotoReader.loadSample()  -> Promise of File[] from assets/sample/
+//   PhotoReader.loadSample()  -> Promise of { album, files } from assets/sample/
+//   PhotoReader.idFor(file)   -> the id a photo gets, to spot duplicates
 (function () {
   var SAMPLE_DIR = "assets/sample/";
 
+  function idFor(file) {
+    return file.name + ":" + file.size + ":" + file.lastModified;
+  }
+
   function readOne(file) {
     var record = {
-      id: file.name + ":" + file.size + ":" + file.lastModified,
+      id: idFor(file),
       name: file.name,
       url: URL.createObjectURL(file),
       lat: null,
@@ -60,7 +65,7 @@
         return response.json();
       })
       .then(function (manifest) {
-        return Promise.all(
+        var files = Promise.all(
           manifest.photos.map(function (name) {
             return fetch(SAMPLE_DIR + name)
               .then(function (response) {
@@ -76,8 +81,11 @@
               });
           }),
         );
+        return files.then(function (list) {
+          return { album: manifest.album, files: list };
+        });
       });
   }
 
-  window.PhotoReader = { read: read, loadSample: loadSample };
+  window.PhotoReader = { read: read, loadSample: loadSample, idFor: idFor };
 })();
