@@ -73,7 +73,9 @@
     var key = lat.toFixed(2) + "," + lng.toFixed(2);
     if (cache[key]) return cache[key];
 
-    var fallback = lat.toFixed(2) + ", " + lng.toFixed(2);
+    var fallback =
+      Math.abs(lat).toFixed(2) + "°" + (lat < 0 ? "S" : "N") + " " +
+      Math.abs(lng).toFixed(2) + "°" + (lng < 0 ? "W" : "E");
     var url =
       "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10" +
       "&accept-language=en&lat=" +

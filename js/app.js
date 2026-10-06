@@ -94,24 +94,31 @@
   }
 
   // The URL hash mirrors the screen (#/tokyo), so the phone's back button
-  // and browser history return to the gallery.
+  // and browser history return to the gallery. Some embedded viewers refuse
+  // history changes; the app then just switches screens without them.
+  function clearHash() {
+    try {
+      history.replaceState(null, "", location.pathname + location.search);
+    } catch (error) {}
+  }
+
   function route() {
     var match = /^#\/(.+)$/.exec(location.hash);
     var city = match ? findCity(decodeURIComponent(match[1])) : null;
     if (city && city.unlocked) {
       showMap(city);
     } else {
-      if (match) {
-        history.replaceState(null, "", location.pathname + location.search);
-      }
+      if (match) clearHash();
       showGallery();
     }
   }
 
   function openCity(city) {
     if (location.hash !== "#/" + city.id) {
-      // Mark the entry so "back" can simply pop history.
-      history.pushState({ fromGallery: true }, "", "#/" + city.id);
+      try {
+        // Mark the entry so "back" can simply pop history.
+        history.pushState({ fromGallery: true }, "", "#/" + city.id);
+      } catch (error) {}
     }
     showMap(city);
   }
@@ -120,7 +127,7 @@
     if (history.state && history.state.fromGallery) {
       history.back();
     } else {
-      history.replaceState(null, "", location.pathname + location.search);
+      clearHash();
       showGallery();
     }
   }
