@@ -373,21 +373,21 @@
     }
   }
 
+  // The pin under a screen point (with a little slack for fingers).
   function pinAt(clientX, clientY) {
-    var best = null;
-    var bestDistance = 34;
-    for (var i = 0; i < pins.length; i += 1) {
-      if (!pins[i].screen) continue;
-      var d = Math.hypot(
-        clientX - pins[i].screen.x,
-        clientY - (pins[i].screen.y - 30),
-      );
-      if (d < bestDistance) {
-        best = pins[i];
-        bestDistance = d;
+    var slack = 8;
+    for (var i = pins.length - 1; i >= 0; i -= 1) {
+      var box = pins[i].card.getBoundingClientRect();
+      if (
+        clientX >= box.left - slack &&
+        clientX <= box.right + slack &&
+        clientY >= box.top - slack &&
+        clientY <= box.bottom + slack
+      ) {
+        return pins[i];
       }
     }
-    return best;
+    return null;
   }
 
   function setPins(list) {
@@ -410,7 +410,7 @@
         el.querySelector(".map-pin-count").textContent = String(pin.count);
       }
       pinLayer.appendChild(el);
-      return Object.assign({}, pin, { el: el });
+      return Object.assign({}, pin, { el: el, card: card });
     });
     updatePins();
   }

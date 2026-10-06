@@ -3,6 +3,8 @@
 //   Gallery.update()          re-read photo counts and lock state
 //   Gallery.goTo(index)       slide to a city
 //   Gallery.setActive(bool)   whether the gallery is the visible screen
+//   Gallery.reveal(cityId, done)  slide to a newly unlocked city and play
+//                                 the reveal: fog clears, colour fills in
 (function () {
   var root = document.getElementById("gallery");
   var viewport = document.getElementById("gallery-viewport");
@@ -55,8 +57,10 @@
     card.querySelector(".city-count").textContent = photoCountLabel(
       city.unlocked ? count : 0,
     );
-    card.querySelector(".city-lock-text").textContent =
-      "Add a photo from " + city.name + " to unlock.";
+    // Locked but with photos waiting: the user chose "Not now" earlier.
+    card.querySelector(".city-lock-text").textContent = count
+      ? photoCountLabel(count) + " waiting. Tap to unlock."
+      : "Add a photo from " + city.name + " to unlock.";
     card.querySelector(".city-art").setAttribute(
       "aria-label",
       city.unlocked
@@ -233,6 +237,45 @@
       }
     },
     goTo: goTo,
+    reveal: function (cityId, done) {
+      var index = this.indexOf(cityId);
+      var card = cards[index];
+      var city = cities[index];
+      goTo(index);
+
+      // Wait for the slide to settle, then clear the fog.
+      setTimeout(function () {
+        card.classList.add("is-revealing");
+        card.classList.remove("is-locked");
+        dots[index].classList.remove("is-locked");
+        card.querySelector(".city-lock-text").textContent = "";
+        var countWrap = card.querySelector(".city-count-wrap");
+        countWrap.style.visibility = "hidden";
+
+        // Then pop the caption in with the polaroid animation and count up.
+        setTimeout(function () {
+          var caption = card.querySelector(".city-caption");
+          var countEl = card.querySelector(".city-count");
+          var total = city.photos.length;
+          var start = performance.now();
+          countWrap.style.visibility = "";
+          caption.classList.add("is-popping");
+          Effects.playPaperSound();
+          (function tick() {
+            var t = Math.min(1, (performance.now() - start) / 700);
+            countEl.textContent = photoCountLabel(Math.max(1, Math.round(total * t)));
+            if (t < 1) requestAnimationFrame(tick);
+          })();
+
+          setTimeout(function () {
+            card.classList.remove("is-revealing");
+            caption.classList.remove("is-popping");
+            updateCard(card, city);
+            if (done) done();
+          }, 1100);
+        }, 900);
+      }, 600);
+    },
     indexOf: function (cityId) {
       for (var i = 0; i < cities.length; i += 1) {
         if (cities[i].id === cityId) return i;

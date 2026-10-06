@@ -70,7 +70,8 @@
     Gallery.setActive(true);
   }
 
-  function showMap(city) {
+  // onSettled runs once the map is showing and any new pins have popped in.
+  function showMap(city, onSettled) {
     if (!city || !city.unlocked) {
       showGallery();
       return;
@@ -85,7 +86,8 @@
       if (openCityId !== city.id) return;
       document.body.classList.remove("is-opening", "view-gallery");
       document.body.classList.add("view-map");
-      showPins(city);
+      var popTime = showPins(city);
+      if (onSettled) setTimeout(onSettled, popTime + 900);
     });
   }
 
@@ -109,14 +111,14 @@
     }
   }
 
-  function openCity(city) {
+  function openCity(city, onSettled) {
     if (location.hash !== "#/" + city.id) {
       try {
         // Mark the entry so "back" can simply pop history.
         history.pushState({ fromGallery: true }, "", "#/" + city.id);
       } catch (error) {}
     }
-    showMap(city);
+    showMap(city, onSettled);
   }
 
   function goBack() {
@@ -202,6 +204,7 @@
     city.photos.forEach(function (photo) {
       delete newPhotoIds[photo.id];
     });
+    return newCount ? 350 + newCount * 260 : 0;
   }
 
   DioramaMap.onLandmark = function (city, key) {
@@ -312,19 +315,59 @@
       Gallery.update();
       if (result.far.length) announceFarPlaces(result.far);
 
-      // Locked cities are unlocked in the next step; for now just say so.
-      result.cities.forEach(function (city) {
-        if (city.unlocked) return;
-        Notice.toast(
-          plural(city.photos.length, "photo") + " from " + city.name +
-            " waiting to unlock it.",
-        );
-      });
-
       var firstOpen = result.cities.filter(function (city) {
         return city.unlocked;
       })[0];
-      if (firstOpen) openCity(firstOpen);
+      var locked = result.cities.filter(function (city) {
+        return !city.unlocked;
+      });
+      // Show the open city's new pins first, then offer the unlocks.
+      if (firstOpen) {
+        openCity(firstOpen, function () {
+          queueUnlocks(locked);
+        });
+      } else {
+        queueUnlocks(locked);
+      }
+    });
+  }
+
+  // ---- Unlocking cities ---------------------------------------------------
+
+  var unlockQueue = [];
+  var unlocking = false;
+
+  function queueUnlocks(list) {
+    list.forEach(function (city) {
+      if (!city.unlocked && unlockQueue.indexOf(city) < 0) {
+        unlockQueue.push(city);
+      }
+    });
+    nextUnlock();
+  }
+
+  function nextUnlock() {
+    if (unlocking || !unlockQueue.length) return;
+    unlocking = true;
+    var city = unlockQueue.shift();
+
+    Notice.unlockPrompt(city, city.photos.length).then(function (yes) {
+      if (!yes) {
+        Gallery.update();
+        unlocking = false;
+        nextUnlock();
+        return;
+      }
+
+      city.unlocked = true;
+      var wasOnMap = !!openCityId;
+      if (wasOnMap) goBack();
+      setTimeout(function () {
+        Gallery.reveal(city.id, function () {
+          unlocking = false;
+          nextUnlock();
+        });
+      }, wasOnMap ? 420 : 0);
     });
   }
 
@@ -404,7 +447,15 @@
 
   // ---- Start --------------------------------------------------------------
 
-  Gallery.init(cities, { onOpen: openCity });
+  Gallery.init(cities, {
+    onOpen: function (city) {
+      openCity(city);
+    },
+    // A locked city with photos waiting (after "Not now") asks again.
+    onLockedTap: function (city) {
+      if (city.photos.length) queueUnlocks([city]);
+    },
+  });
   DioramaMap.preload(cities[0]);
   route();
 
