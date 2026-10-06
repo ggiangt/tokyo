@@ -365,19 +365,17 @@
   }
 
   // ---- Adding photos ------------------------------------------------------
-  // "Try with my trip" and "Or upload your own" both end up in addFiles().
+  // "Upload photos" opens a mock Photos window; the chosen photos go
+  // through addFiles().
 
   var tripButton = document.getElementById("trip-button");
-  var uploadLink = document.getElementById("upload-link");
-  var uploadInput = document.getElementById("upload-input");
   var seenPhotoIds = {};
   var busy = false;
 
   function setBusy(isBusy) {
     busy = isBusy;
     tripButton.disabled = isBusy;
-    uploadLink.disabled = isBusy;
-    tripButton.textContent = isBusy ? "Opening photos…" : "Try with my trip";
+    tripButton.textContent = isBusy ? "Opening photos…" : "Upload photos";
   }
 
   function addFiles(files) {
@@ -404,8 +402,8 @@
       });
   }
 
-  // "Try with my trip" opens a mock Photos window with the sample trip, so
-  // you still choose which photos to add.
+  // The window shows the sample trip in assets/sample/; you choose which
+  // photos to add.
   tripButton.addEventListener("click", function () {
     if (busy) return;
     setBusy(true);
@@ -427,15 +425,6 @@
       .then(function () {
         setBusy(false);
       });
-  });
-
-  uploadLink.addEventListener("click", function () {
-    uploadInput.click();
-  });
-  uploadInput.addEventListener("change", function () {
-    var files = Array.prototype.slice.call(uploadInput.files);
-    uploadInput.value = "";
-    addFiles(files);
   });
 
   // ---- Start --------------------------------------------------------------

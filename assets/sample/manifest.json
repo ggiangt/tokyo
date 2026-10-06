@@ -1,11 +1,14 @@
 {
-  "note": "Photos shown when you tap 'Try with my trip'. Add a file here after dropping it in this folder.",
+  "note": "Photos shown when you tap 'Upload photos'. Add a file here after dropping it in this folder.",
   "album": "Japan 2026",
   "photos": [
     "kyoto-kinkakuji.jpg",
     "kyoto-kiyomizu-stage.jpg",
     "kyoto-kiyomizu-pagoda.jpg",
+    "kyoto-kiyomizu-view.jpg",
     "nara-todaiji.jpg",
+    "strawberry-daifuku.jpg",
+    "gyukatsu.jpg",
     "ramen.jpg",
     "meiji-otorii.jpg",
     "meiji-sake-barrels.jpg",

@@ -334,29 +334,10 @@ body.view-map .back-button {
 .trip-button:active {
   transform: scale(0.97);
 }
-.trip-button:disabled,
-.upload-link:disabled {
+.trip-button:disabled {
   opacity: 0.6;
   cursor: progress;
 }
-.upload-link {
-  padding: 6px 8px;
-  border: 0;
-  background: none;
-  color: var(--ink-soft);
-  font:
-    14px/1.2 system-ui,
-    -apple-system,
-    "Segoe UI",
-    sans-serif;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-.upload-input {
-  display: none;
-}
-
 .notice-layer {
   position: fixed;
   left: 0;
