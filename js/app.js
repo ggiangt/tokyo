@@ -124,6 +124,95 @@
     Polaroids.hide();
   };
 
+  // ---- Adding photos -----------------------------------------------------
+  // "Try with my trip" and "Or upload your own" both end up in addFiles().
+
+  var tripButton = document.getElementById("trip-button");
+  var uploadLink = document.getElementById("upload-link");
+  var uploadInput = document.getElementById("upload-input");
+  var seenPhotoIds = {};
+  var busy = false;
+
+  function setBusy(isBusy) {
+    busy = isBusy;
+    tripButton.disabled = isBusy;
+    uploadLink.disabled = isBusy;
+    tripButton.textContent = isBusy ? "Reading photos…" : "Try with my trip";
+  }
+
+  function addFiles(files) {
+    if (busy || !files.length) return Promise.resolve();
+    setBusy(true);
+    return PhotoReader.read(files)
+      .then(function (records) {
+        var fresh = records.filter(function (record) {
+          if (seenPhotoIds[record.id]) {
+            URL.revokeObjectURL(record.url);
+            return false;
+          }
+          seenPhotoIds[record.id] = true;
+          return true;
+        });
+        handleNewPhotos(fresh, records.length - fresh.length);
+      })
+      .catch(function (error) {
+        console.error(error);
+        Notice.toast("Sorry, those photos couldn't be read.");
+      })
+      .then(function () {
+        setBusy(false);
+      });
+  }
+
+  function handleNewPhotos(photos, duplicates) {
+    var located = photos.filter(function (photo) {
+      return photo.lat !== null;
+    }).length;
+    console.table(
+      photos.map(function (photo) {
+        return {
+          name: photo.name,
+          lat: photo.lat,
+          lng: photo.lng,
+          takenAt: photo.takenAt && photo.takenAt.toISOString(),
+        };
+      }),
+    );
+    if (!photos.length) {
+      Notice.toast(duplicates ? "Those photos are already here." : "No photos found.");
+      return;
+    }
+    Notice.toast(
+      "Read " + photos.length + (photos.length === 1 ? " photo" : " photos") +
+        " · " + located + " with a location" +
+        (duplicates ? " · " + duplicates + " already added" : ""),
+    );
+  }
+
+  tripButton.addEventListener("click", function () {
+    if (busy) return;
+    setBusy(true);
+    PhotoReader.loadSample()
+      .then(function (files) {
+        setBusy(false);
+        return addFiles(files);
+      })
+      .catch(function (error) {
+        console.error(error);
+        setBusy(false);
+        Notice.toast("Couldn't load the sample trip.");
+      });
+  });
+
+  uploadLink.addEventListener("click", function () {
+    uploadInput.click();
+  });
+  uploadInput.addEventListener("change", function () {
+    var files = Array.prototype.slice.call(uploadInput.files);
+    uploadInput.value = "";
+    addFiles(files);
+  });
+
   // ---- Start --------------------------------------------------------------
 
   Gallery.init(cities, { onOpen: openCity });

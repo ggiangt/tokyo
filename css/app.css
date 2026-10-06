@@ -304,3 +304,93 @@ body.view-map .back-button {
     display: none;
   }
 }
+
+/* ---- Adding photos ------------------------------------------------------ */
+
+.gallery-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+.trip-button {
+  padding: 15px 30px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  box-shadow: 0 12px 26px rgba(77, 59, 40, 0.24);
+  color: var(--paper);
+  font:
+    600 17px/1 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease;
+}
+.trip-button:active {
+  transform: scale(0.97);
+}
+.trip-button:disabled,
+.upload-link:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.upload-link {
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font:
+    14px/1.2 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.upload-input {
+  display: none;
+}
+
+.notice-layer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: calc(20px + env(safe-area-inset-top));
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  pointer-events: none;
+}
+.notice {
+  max-width: 420px;
+  padding: 12px 18px;
+  border-radius: 6px;
+  background: var(--paper);
+  box-shadow: 0 14px 32px rgba(77, 59, 40, 0.22);
+  color: var(--ink);
+  font:
+    15px/1.4 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(-12px);
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease;
+  pointer-events: auto;
+}
+.notice.is-visible {
+  opacity: 1;
+  transform: none;
+}
