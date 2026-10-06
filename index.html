@@ -195,6 +195,10 @@
   </head>
   <body class="view-gallery">
     <main class="gallery" id="gallery" aria-label="Your cities">
+      <div class="tray-chips">
+        <button class="tray-chip" id="tray-elsewhere" type="button" hidden></button>
+        <button class="tray-chip" id="tray-unplaced" type="button" hidden></button>
+      </div>
       <div class="gallery-viewport" id="gallery-viewport">
         <div class="gallery-track" id="gallery-track"></div>
       </div>
@@ -215,6 +219,7 @@
       <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
       All cities
     </button>
+    <div class="pin-layer" id="pin-layer"></div>
     <div class="polaroid-layer" id="polaroid-layer"></div>
     <div class="petal-layer" id="petal-layer"></div>
     <div class="notice-layer" id="notice-layer"></div>
@@ -225,6 +230,7 @@
     <script src="js/effects.js"></script>
     <script src="js/notice.js"></script>
     <script src="js/photos.js"></script>
+    <script src="js/places.js"></script>
     <script src="js/polaroids.js"></script>
     <script src="js/map.js"></script>
     <script src="js/gallery.js"></script>

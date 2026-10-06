@@ -361,7 +361,7 @@ body.view-map .back-button {
   position: fixed;
   left: 0;
   right: 0;
-  top: calc(20px + env(safe-area-inset-top));
+  top: calc(64px + env(safe-area-inset-top));
   z-index: 7;
   display: flex;
   flex-direction: column;
@@ -393,4 +393,115 @@ body.view-map .back-button {
 .notice.is-visible {
   opacity: 1;
   transform: none;
+}
+
+/* ---- Photo pins on the map ---------------------------------------------- */
+
+.pin-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+body.view-gallery .pin-layer {
+  display: none;
+}
+.map-pin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+/* The pin's bottom edge sits on its spot. */
+.map-pin-card {
+  position: absolute;
+  left: -24px;
+  bottom: 0;
+  width: 48px;
+  height: 56px;
+  padding: 4px 4px 12px;
+  border-radius: 2px;
+  background: var(--paper);
+  box-shadow: 0 8px 16px rgba(77, 59, 40, 0.3);
+  transform: rotate(var(--settle-angle, 0deg));
+  transform-origin: center bottom;
+}
+.map-pin.is-new .map-pin-card {
+  opacity: 0;
+  animation:
+    pinAppear 1ms linear var(--delay, 0ms) forwards,
+    polaroidPop 560ms cubic-bezier(0.2, 0.8, 0.2, 1) var(--delay, 0ms) forwards;
+}
+@keyframes pinAppear {
+  to {
+    opacity: 1;
+  }
+}
+.map-pin-photo {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+}
+.map-pin-count {
+  position: absolute;
+  left: 14px;
+  bottom: 44px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font:
+    700 12px/22px system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  text-align: center;
+}
+
+/* ---- Trays + polaroid captions ------------------------------------------ */
+
+.tray-chips {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+}
+.tray-chip {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 253, 249, 0.88);
+  box-shadow: 0 6px 16px rgba(77, 59, 40, 0.14);
+  color: var(--ink);
+  font:
+    600 13px/1 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  cursor: pointer;
+}
+.tray-chip[hidden] {
+  display: none;
+}
+
+.polaroid-face.has-caption .polaroid-photo {
+  height: calc(100% - 40px);
+}
+.polaroid-caption {
+  overflow: hidden;
+  height: 40px;
+  padding-top: 6px;
+  color: var(--ink);
+  font-family: "Homemade Apple", cursive;
+  font-size: 14px;
+  line-height: 34px;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

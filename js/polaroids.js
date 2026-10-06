@@ -1,6 +1,6 @@
 // Draggable polaroids (moved from index.html; same look and animation).
 // Polaroids.show(key, cards) opens a set, Polaroids.hide() closes it.
-// A card is { photo: 'url("...")', angle: degrees }.
+// A card is { photo: 'url("...")', angle: degrees, caption: optional text }.
 (function () {
   var polaroidLayer = document.getElementById("polaroid-layer");
   var polaroidTray = document.createElement("div");
@@ -111,6 +111,13 @@
       photo.style.setProperty("--photo", card.photo);
 
       frontFace.appendChild(photo);
+      if (card.caption) {
+        var caption = document.createElement("div");
+        caption.className = "polaroid-caption";
+        caption.textContent = card.caption;
+        frontFace.classList.add("has-caption");
+        frontFace.appendChild(caption);
+      }
       frame.appendChild(frontFace);
       enablePolaroidDragging(frame);
       polaroidTray.appendChild(frame);

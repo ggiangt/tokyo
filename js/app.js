@@ -1,6 +1,9 @@
-// Wires the gallery, the map and the polaroids together.
+// Wires the gallery, the map and the polaroids together, and decides where
+// new photos go.
 (function () {
   var backButton = document.getElementById("back-button");
+  var elsewhereChip = document.getElementById("tray-elsewhere");
+  var unplacedChip = document.getElementById("tray-unplaced");
 
   var cities = window.CITIES.map(function (city) {
     var copy = Object.assign({}, city);
@@ -8,6 +11,9 @@
     copy.photos = [];
     return copy;
   });
+  var elsewhere = [];
+  var unplaced = [];
+  var newPhotoIds = {};
 
   function findCity(id) {
     for (var i = 0; i < cities.length; i += 1) {
@@ -16,29 +22,44 @@
     return null;
   }
 
-  // Temporary: Tokyo's original hardcoded photos, until uploads replace them.
-  var legacyCards = {
-    meiji: [
-      { angle: -12, photo: 'url("assets/meiji-photo-1.png")' },
-      { angle: -3, photo: 'url("assets/meiji-photo-2.png")' },
-      { angle: 9, photo: 'url("assets/meiji-photo-3.png")' },
-    ],
-    scramble: [
-      { angle: -11, photo: 'url("assets/scramble-photo-1.png")' },
-      { angle: 0, photo: 'url("assets/scramble-photo-2.png")' },
-      { angle: 12, photo: 'url("assets/scramble-photo-3.png")' },
-    ],
-    sensoji: [
-      { angle: -11, photo: 'url("assets/senso-photo-1.png")' },
-      { angle: -2, photo: 'url("assets/senso-photo-2.png")' },
-      { angle: 7, photo: 'url("assets/senso-photo-3.png")' },
-      { angle: 13, photo: 'url("assets/senso-photo-4.png")' },
-    ],
-    cat: [
-      { angle: -8, photo: 'url("assets/cat-photo-1.png")' },
-      { angle: 9, photo: 'url("assets/cat-photo-2.png")' },
-    ],
-  };
+  function plural(count, word) {
+    return count + " " + word + (count === 1 ? "" : "s");
+  }
+
+  // ---- Polaroid cards -----------------------------------------------------
+
+  var cardAngles = [-11, -3, 8, 12, -7, 4, -9, 10];
+
+  function formatDate(date) {
+    return date
+      ? date.toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : "";
+  }
+
+  function byDate(a, b) {
+    return (a.takenAt || 0) - (b.takenAt || 0);
+  }
+
+  function toCards(photos, captionFor) {
+    return photos
+      .slice()
+      .sort(byDate)
+      .map(function (photo, i) {
+        return {
+          photo: 'url("' + photo.url + '")',
+          angle: cardAngles[i % cardAngles.length],
+          caption: captionFor(photo),
+        };
+      });
+  }
+
+  function dateCaption(photo) {
+    return formatDate(photo.takenAt);
+  }
 
   // ---- Screens ------------------------------------------------------------
 
@@ -48,7 +69,7 @@
     openCityId = null;
     Polaroids.hide();
     DioramaMap.close();
-    document.body.classList.remove("view-map");
+    document.body.classList.remove("view-map", "is-opening");
     document.body.classList.add("view-gallery");
     Gallery.setActive(true);
   }
@@ -59,13 +80,16 @@
       return;
     }
     openCityId = city.id;
+    Polaroids.hide();
     Gallery.goTo(Gallery.indexOf(city.id), false);
     Gallery.setActive(false);
     document.body.classList.add("is-opening");
+    DioramaMap.setPins([]);
     DioramaMap.open(city, function () {
       if (openCityId !== city.id) return;
       document.body.classList.remove("is-opening", "view-gallery");
       document.body.classList.add("view-map");
+      showPins(city);
     });
   }
 
@@ -77,7 +101,9 @@
     if (city && city.unlocked) {
       showMap(city);
     } else {
-      if (match) history.replaceState(null, "", location.pathname + location.search);
+      if (match) {
+        history.replaceState(null, "", location.pathname + location.search);
+      }
       showGallery();
     }
   }
@@ -102,29 +128,243 @@
   backButton.addEventListener("click", goBack);
   window.addEventListener("popstate", route);
   window.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" && openCityId) {
-      if (Polaroids.isOpen()) {
-        Polaroids.hide();
-      } else {
-        goBack();
-      }
+    if (event.key !== "Escape") return;
+    if (Polaroids.isOpen()) {
+      Polaroids.hide();
+    } else if (openCityId) {
+      goBack();
     }
   });
 
-  // ---- Map interactions ---------------------------------------------------
+  // ---- Map: pins and taps -------------------------------------------------
+
+  // One pin per landmark with photos (showing the newest), plus one pin per
+  // photo that landed on a random spot. New pins pop in one after another.
+  function showPins(city) {
+    var pins = [];
+    var newCount = 0;
+
+    function delayFor(isNew) {
+      if (!isNew) return 0;
+      newCount += 1;
+      return 350 + (newCount - 1) * 260;
+    }
+
+    city.landmarks.forEach(function (landmark) {
+      var photos = city.photos
+        .filter(function (photo) {
+          return photo.landmarkKey === landmark.key;
+        })
+        .sort(byDate);
+      if (!photos.length) return;
+      var isNew = photos.some(function (photo) {
+        return newPhotoIds[photo.id];
+      });
+      pins.push({
+        id: "landmark:" + landmark.key,
+        landmark: landmark.key,
+        x: landmark.x,
+        y: landmark.y,
+        photo: photos[photos.length - 1].url,
+        count: photos.length,
+        isNew: isNew,
+        delay: delayFor(isNew),
+      });
+    });
+
+    city.photos.forEach(function (photo) {
+      if (!photo.spot) return;
+      var isNew = !!newPhotoIds[photo.id];
+      pins.push({
+        id: photo.id,
+        photoId: photo.id,
+        x: photo.spot.x,
+        y: photo.spot.y,
+        photo: photo.url,
+        count: 1,
+        isNew: isNew,
+        delay: delayFor(isNew),
+      });
+    });
+
+    DioramaMap.setPins(pins);
+
+    pins.forEach(function (pin) {
+      if (pin.isNew) {
+        setTimeout(function () {
+          if (openCityId === city.id) Effects.playPaperSound();
+        }, pin.delay + 120);
+      }
+    });
+    city.photos.forEach(function (photo) {
+      delete newPhotoIds[photo.id];
+    });
+  }
 
   DioramaMap.onLandmark = function (city, key) {
-    var cards = city.id === "tokyo" ? legacyCards[key] : null;
-    if (cards && cards.length) {
-      Polaroids.show(city.id + ":" + key, cards);
+    var landmark = city.landmarks.filter(function (l) {
+      return l.key === key;
+    })[0];
+    var photos = city.photos.filter(function (photo) {
+      return photo.landmarkKey === key;
+    });
+    if (!photos.length) {
+      Notice.toast("No photos at " + landmark.name + " yet.");
+      return;
     }
+    Polaroids.show(city.id + ":" + key, toCards(photos, dateCaption));
+  };
+
+  DioramaMap.onPinTap = function (city, pin) {
+    var photo = city.photos.filter(function (p) {
+      return p.id === pin.photoId;
+    })[0];
+    if (photo) Polaroids.show("photo:" + photo.id, toCards([photo], dateCaption));
   };
 
   DioramaMap.onEmptyTap = function () {
     Polaroids.hide();
   };
 
-  // ---- Adding photos -----------------------------------------------------
+  // ---- "Elsewhere" and "Couldn't place" trays -----------------------------
+
+  function updateTrays() {
+    elsewhereChip.hidden = !elsewhere.length;
+    elsewhereChip.textContent = "Elsewhere · " + elsewhere.length;
+    unplacedChip.hidden = !unplaced.length;
+    unplacedChip.textContent = "Couldn't place · " + unplaced.length;
+  }
+
+  elsewhereChip.addEventListener("click", function () {
+    Polaroids.show(
+      "tray:elsewhere:" + elsewhere.length,
+      toCards(elsewhere, function (photo) {
+        return photo.place ? photo.place.split(",")[0] : "…";
+      }),
+    );
+  });
+
+  unplacedChip.addEventListener("click", function () {
+    Polaroids.show(
+      "tray:unplaced:" + unplaced.length,
+      toCards(unplaced, function (photo) {
+        return formatDate(photo.takenAt) || "no location";
+      }),
+    );
+  });
+
+  // ---- Placing new photos -------------------------------------------------
+
+  function placePhotos(photos) {
+    var touched = [];
+    var newElsewhere = [];
+    var newUnplaced = [];
+    var needSpots = [];
+
+    photos.forEach(function (photo) {
+      var where = Places.locate(photo, cities);
+      if (where.kind === "unplaced") {
+        newUnplaced.push(photo);
+        return;
+      }
+      if (where.kind === "elsewhere") {
+        newElsewhere.push(photo);
+        return;
+      }
+      photo.landmarkKey = where.landmark ? where.landmark.key : null;
+      photo.spot = null;
+      where.city.photos.push(photo);
+      newPhotoIds[photo.id] = true;
+      if (touched.indexOf(where.city) < 0) touched.push(where.city);
+      if (!where.landmark) needSpots.push({ photo: photo, city: where.city });
+    });
+
+    // Random spots one at a time, so photos don't pile on the same place.
+    var spotsDone = needSpots.reduce(function (chain, item) {
+      return chain.then(function () {
+        var taken = item.city.photos
+          .filter(function (p) {
+            return p.spot;
+          })
+          .map(function (p) {
+            return p.spot;
+          });
+        return DioramaMap.pickSpot(item.city, taken).then(function (spot) {
+          item.photo.spot = spot;
+        });
+      });
+    }, Promise.resolve());
+
+    return spotsDone.then(function () {
+      return {
+        cities: touched,
+        elsewhere: newElsewhere,
+        unplaced: newUnplaced,
+      };
+    });
+  }
+
+  function nameElsewhere(photos) {
+    var groups = {};
+    photos.forEach(function (photo) {
+      var key = photo.lat.toFixed(2) + "," + photo.lng.toFixed(2);
+      (groups[key] = groups[key] || []).push(photo);
+    });
+
+    Object.keys(groups).forEach(function (key) {
+      var group = groups[key];
+      Places.lookupName(group[0].lat, group[0].lng).then(function (place) {
+        group.forEach(function (photo) {
+          photo.place = place;
+        });
+        Notice.toast(
+          "This is from " + place + ". That map doesn't exist yet.",
+          { duration: 8000 },
+        );
+      });
+    });
+  }
+
+  function handleNewPhotos(photos, duplicates) {
+    if (!photos.length) {
+      Notice.toast(
+        duplicates ? "Those photos are already here." : "No photos found.",
+      );
+      return Promise.resolve();
+    }
+
+    return placePhotos(photos).then(function (result) {
+      elsewhere = elsewhere.concat(result.elsewhere);
+      unplaced = unplaced.concat(result.unplaced);
+      Gallery.update();
+      updateTrays();
+
+      if (result.unplaced.length) {
+        Notice.toast(
+          "Couldn't place " +
+            plural(result.unplaced.length, "photo") +
+            ": no location saved in it.",
+        );
+      }
+      if (result.elsewhere.length) nameElsewhere(result.elsewhere);
+
+      // Locked cities are unlocked in the next step; for now just say so.
+      result.cities.forEach(function (city) {
+        if (city.unlocked) return;
+        Notice.toast(
+          plural(city.photos.length, "photo") + " from " + city.name +
+            " waiting to unlock it.",
+        );
+      });
+
+      var firstOpen = result.cities.filter(function (city) {
+        return city.unlocked;
+      })[0];
+      if (firstOpen) openCity(firstOpen);
+    });
+  }
+
+  // ---- Adding photos ------------------------------------------------------
   // "Try with my trip" and "Or upload your own" both end up in addFiles().
 
   var tripButton = document.getElementById("trip-button");
@@ -153,7 +393,7 @@
           seenPhotoIds[record.id] = true;
           return true;
         });
-        handleNewPhotos(fresh, records.length - fresh.length);
+        return handleNewPhotos(fresh, records.length - fresh.length);
       })
       .catch(function (error) {
         console.error(error);
@@ -162,31 +402,6 @@
       .then(function () {
         setBusy(false);
       });
-  }
-
-  function handleNewPhotos(photos, duplicates) {
-    var located = photos.filter(function (photo) {
-      return photo.lat !== null;
-    }).length;
-    console.table(
-      photos.map(function (photo) {
-        return {
-          name: photo.name,
-          lat: photo.lat,
-          lng: photo.lng,
-          takenAt: photo.takenAt && photo.takenAt.toISOString(),
-        };
-      }),
-    );
-    if (!photos.length) {
-      Notice.toast(duplicates ? "Those photos are already here." : "No photos found.");
-      return;
-    }
-    Notice.toast(
-      "Read " + photos.length + (photos.length === 1 ? " photo" : " photos") +
-        " · " + located + " with a location" +
-        (duplicates ? " · " + duplicates + " already added" : ""),
-    );
   }
 
   tripButton.addEventListener("click", function () {
@@ -216,7 +431,7 @@
   // ---- Start --------------------------------------------------------------
 
   Gallery.init(cities, { onOpen: openCity });
-
+  updateTrays();
   DioramaMap.preload(cities[0]);
   route();
 

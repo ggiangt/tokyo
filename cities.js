@@ -4,41 +4,137 @@
 //   id        - used in the URL (#/kyoto) and to match photos
 //   name      - shown in the gallery
 //   unlocked  - true if the city is open from the start
+//   center    - real-world centre { lat, lng }
+//   radiusKm  - photos taken within this distance of the centre belong here
 //   gallery   - small image shown on the home screen
 //   map       - full-size artwork used for the zoomable diorama
 //   mapView   - where the camera starts on the map (world units, 0,0 = centre)
-//   landmarks - clickable spots on the artwork:
-//       x, y   - position on the artwork, 0..1 from the bottom-left corner
-//                (open the map with ?dev=1 and click to get these numbers)
-//       radius - size of the clickable area, in the same 0..1 units
+//   landmarks - named places. Photos taken within radiusM metres of lat/lng
+//               snap to the landmark.
+//       x, y   - where it sits on the artwork, 0..1 from the bottom-left
+//                corner (open the map with ?dev=1 and click to get these)
+//       radius - size of the clickable area on the artwork, same 0..1 units
 window.CITIES = [
   {
     id: "tokyo",
     name: "Tokyo",
     unlocked: true,
+    center: { lat: 35.6812, lng: 139.7671 },
+    radiusKm: 40,
     gallery: "assets/cities/tokyo.webp",
     map: "assets/main-scene.png?v=20260423-1046",
     mapView: { x: -0.55, y: 0.3 },
     landmarks: [
-      { key: "meiji", name: "Meiji Jingu", x: 0.315, y: 0.275, radius: 0.19 },
-      { key: "scramble", name: "Shibuya Scramble", x: 0.515, y: 0.695, radius: 0.2 },
-      { key: "sensoji", name: "Senso-ji", x: 0.55, y: 0.49, radius: 0.13 },
-      { key: "cat", name: "Cat billboard", x: 0.66, y: 0.36, radius: 0.13 },
+      {
+        key: "meiji",
+        name: "Meiji Jingu",
+        lat: 35.6764,
+        lng: 139.6993,
+        radiusM: 600,
+        x: 0.315,
+        y: 0.275,
+        radius: 0.19,
+      },
+      {
+        key: "scramble",
+        name: "Shibuya Scramble",
+        lat: 35.6595,
+        lng: 139.7005,
+        radiusM: 300,
+        x: 0.515,
+        y: 0.695,
+        radius: 0.2,
+      },
+      {
+        key: "sensoji",
+        name: "Senso-ji",
+        lat: 35.7148,
+        lng: 139.7967,
+        radiusM: 400,
+        x: 0.55,
+        y: 0.49,
+        radius: 0.13,
+      },
+      {
+        key: "cat",
+        name: "Shinjuku cat billboard",
+        lat: 35.6913,
+        lng: 139.7021,
+        radiusM: 250,
+        x: 0.66,
+        y: 0.36,
+        radius: 0.13,
+      },
     ],
   },
   {
     id: "kyoto",
     name: "Kyoto",
     unlocked: false,
+    center: { lat: 35.0116, lng: 135.7681 },
+    radiusKm: 15,
     gallery: "assets/cities/kyoto.webp",
     map: "assets/cities/kyoto.webp",
     mapView: { x: 0, y: 0 },
-    landmarks: [],
+    landmarks: [
+      {
+        key: "kiyomizu",
+        name: "Kiyomizu-dera",
+        lat: 34.9949,
+        lng: 135.785,
+        radiusM: 400,
+        x: 0.28,
+        y: 0.775,
+        radius: 0.13,
+      },
+      {
+        key: "inari",
+        name: "Fushimi Inari",
+        lat: 34.9671,
+        lng: 135.7727,
+        radiusM: 500,
+        x: 0.13,
+        y: 0.56,
+        radius: 0.1,
+      },
+      {
+        key: "yasaka",
+        name: "Yasaka Pagoda",
+        lat: 34.9986,
+        lng: 135.7809,
+        radiusM: 250,
+        x: 0.605,
+        y: 0.76,
+        radius: 0.1,
+      },
+      {
+        key: "kinkakuji",
+        name: "Kinkaku-ji",
+        lat: 35.0394,
+        lng: 135.7292,
+        radiusM: 400,
+        x: 0.845,
+        y: 0.68,
+        radius: 0.12,
+      },
+      {
+        key: "shirakawa",
+        name: "Gion Shirakawa",
+        lat: 35.0055,
+        lng: 135.7745,
+        radiusM: 400,
+        x: 0.59,
+        y: 0.275,
+        radius: 0.12,
+      },
+    ],
   },
   {
     id: "lisbon",
     name: "Lisbon",
     unlocked: false,
+    center: { lat: 38.7223, lng: -9.1393 },
+    radiusKm: 20,
     gallery: "assets/cities/lisbon.webp",
     map: "assets/cities/lisbon.webp",
     mapView: { x: 0, y: 0 },
@@ -48,6 +144,8 @@ window.CITIES = [
     id: "san-francisco",
     name: "San Francisco",
     unlocked: false,
+    center: { lat: 37.7749, lng: -122.4194 },
+    radiusKm: 15,
     gallery: "assets/cities/san-francisco.webp",
     map: "assets/cities/san-francisco.webp",
     mapView: { x: 0, y: 0 },

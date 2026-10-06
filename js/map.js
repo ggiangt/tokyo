@@ -5,7 +5,12 @@
 //   DioramaMap.preload(city)        start loading a city's artwork early
 //   DioramaMap.onLandmark = function (city, landmarkKey) {}
 //   DioramaMap.onEmptyTap = function (city) {}
+//   DioramaMap.setPins(pins)        photo pins: [{ id, x, y, photo, count, isNew }]
+//   DioramaMap.onPinTap = function (city, pin) {}
+//   DioramaMap.pickSpot(city, taken) -> Promise of a random { x, y } on the art
 (function () {
+  var pinLayer = document.getElementById("pin-layer");
+  var pins = [];
   var raycaster = new THREE.Raycaster();
   var pointer = new THREE.Vector2(-10, -10);
   var hoveredLandmark = null;
@@ -308,8 +313,27 @@
   }
   renderer.domElement.addEventListener("pointerup", endPointer);
   renderer.domElement.addEventListener("pointercancel", endPointer);
+  // Taps are handled above; stop the browser's follow-up click, which would
+  // otherwise land on the polaroids that just opened and close them again.
+  renderer.domElement.addEventListener(
+    "touchend",
+    function (event) {
+      event.preventDefault();
+    },
+    { passive: false },
+  );
 
   function handleTap(clientX, clientY) {
+    var pin = pinAt(clientX, clientY);
+    if (pin && pin.landmark) {
+      if (api.onLandmark) api.onLandmark(activeCity, pin.landmark);
+      return;
+    }
+    if (pin) {
+      if (api.onPinTap) api.onPinTap(activeCity, pin);
+      return;
+    }
+
     var uv = artworkPointAt(clientX, clientY);
     var key = uv ? getHoveredLandmark(uv) : null;
 
@@ -319,6 +343,140 @@
     }
 
     if (api.onEmptyTap) api.onEmptyTap(activeCity);
+  }
+
+  // ---- Photo pins ---------------------------------------------------------
+  // Pins are HTML on top of the canvas. Each frame they're moved to where
+  // their artwork position lands on screen, so they follow pan and zoom.
+
+  var projected = new THREE.Vector3();
+
+  function artworkToScreen(x, y) {
+    projected.set(
+      (x - 0.5) * imagePlane.scale.x,
+      (y - 0.5) * imagePlane.scale.y,
+      0,
+    );
+    projected.project(camera);
+    return {
+      x: (projected.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-projected.y * 0.5 + 0.5) * window.innerHeight,
+    };
+  }
+
+  function updatePins() {
+    for (var i = 0; i < pins.length; i += 1) {
+      var screen = artworkToScreen(pins[i].x, pins[i].y);
+      pins[i].screen = screen;
+      pins[i].el.style.transform =
+        "translate3d(" + screen.x + "px, " + screen.y + "px, 0)";
+    }
+  }
+
+  function pinAt(clientX, clientY) {
+    var best = null;
+    var bestDistance = 34;
+    for (var i = 0; i < pins.length; i += 1) {
+      if (!pins[i].screen) continue;
+      var d = Math.hypot(
+        clientX - pins[i].screen.x,
+        clientY - (pins[i].screen.y - 30),
+      );
+      if (d < bestDistance) {
+        best = pins[i];
+        bestDistance = d;
+      }
+    }
+    return best;
+  }
+
+  function setPins(list) {
+    pinLayer.innerHTML = "";
+    pins = list.map(function (pin, index) {
+      var el = document.createElement("div");
+      el.className = "map-pin" + (pin.isNew ? " is-new" : "");
+      el.innerHTML =
+        '<div class="map-pin-card"><div class="map-pin-photo"></div></div>' +
+        (pin.count > 1 ? '<span class="map-pin-count"></span>' : "");
+      var card = el.querySelector(".map-pin-card");
+      var angle = ((index * 37) % 15) - 7;
+      card.style.setProperty("--settle-angle", angle + "deg");
+      card.style.setProperty("--start-angle", angle - 4 + "deg");
+      card.style.setProperty("--overshoot-angle", angle + 3 + "deg");
+      card.style.setProperty("--delay", (pin.delay || 0) + "ms");
+      el.querySelector(".map-pin-photo").style.backgroundImage =
+        'url("' + pin.photo + '")';
+      if (pin.count > 1) {
+        el.querySelector(".map-pin-count").textContent = String(pin.count);
+      }
+      pinLayer.appendChild(el);
+      return Object.assign({}, pin, { el: el });
+    });
+    updatePins();
+  }
+
+  // Random spot on the painted part of the artwork: skips transparent pixels,
+  // the dark drop shadow, landmark areas and spots already taken.
+  var alphaMaps = {};
+
+  function getAlphaMap(city, texture) {
+    if (alphaMaps[city.id]) return alphaMaps[city.id];
+    var size = 200;
+    var canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = Math.round(
+      (size * texture.image.height) / texture.image.width,
+    );
+    var context = canvas.getContext("2d");
+    context.drawImage(texture.image, 0, 0, canvas.width, canvas.height);
+    alphaMaps[city.id] = {
+      width: canvas.width,
+      height: canvas.height,
+      data: context.getImageData(0, 0, canvas.width, canvas.height).data,
+    };
+    return alphaMaps[city.id];
+  }
+
+  function isOpenGround(map, x, y) {
+    var px = Math.floor(x * map.width);
+    var py = Math.floor((1 - y) * map.height);
+    var i = (py * map.width + px) * 4;
+    var d = map.data;
+    var brightness = (d[i] + d[i + 1] + d[i + 2]) / 3;
+    return d[i + 3] > 245 && brightness > 90;
+  }
+
+  function pickSpot(city, taken) {
+    taken = taken || [];
+    return new Promise(function (resolve) {
+      loadTexture(city, function (texture) {
+        var map = getAlphaMap(city, texture);
+        var landmarks = city.landmarks || [];
+        var fallback = { x: 0.5, y: 0.5 };
+
+        for (var attempt = 0; attempt < 400; attempt += 1) {
+          var x = 0.12 + Math.random() * 0.76;
+          var y = 0.2 + Math.random() * 0.65;
+          if (!isOpenGround(map, x, y)) continue;
+          fallback = { x: x, y: y };
+
+          var clear = true;
+          for (var i = 0; i < landmarks.length && clear; i += 1) {
+            clear =
+              Math.hypot(x - landmarks[i].x, y - landmarks[i].y) >
+              landmarks[i].radius * 0.85;
+          }
+          for (var j = 0; j < taken.length && clear; j += 1) {
+            clear = Math.hypot(x - taken[j].x, y - taken[j].y) > 0.06;
+          }
+          if (clear) {
+            resolve({ x: x, y: y });
+            return;
+          }
+        }
+        resolve(fallback);
+      });
+    });
   }
 
   window.addEventListener("resize", function () {
@@ -382,9 +540,17 @@
     raycaster.setFromCamera(pointer, camera);
     var hits = raycaster.intersectObject(imagePlane);
     hoveredLandmark = hits.length > 0 ? getHoveredLandmark(hits[0].uv) : null;
-    document.body.classList.toggle("is-interactive-hover", !!hoveredLandmark);
+    var hoveredPin = pointer.x > -2 ? pinAt(
+      (pointer.x * 0.5 + 0.5) * window.innerWidth,
+      (-pointer.y * 0.5 + 0.5) * window.innerHeight,
+    ) : null;
+    document.body.classList.toggle(
+      "is-interactive-hover",
+      !!hoveredLandmark || !!hoveredPin,
+    );
 
     renderer.render(scene, camera);
+    updatePins();
   }
 
   animate();
@@ -408,6 +574,9 @@
     hoveredLandmark = null;
     document.body.classList.remove("is-interactive-hover");
   };
+
+  api.setPins = setPins;
+  api.pickSpot = pickSpot;
 
   api.preload = function (city) {
     loadTexture(city);
