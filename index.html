@@ -195,8 +195,23 @@
   </head>
   <body class="view-gallery">
     <main class="gallery" id="gallery" aria-label="Your cities">
+      <div class="view-switch" role="group" aria-label="View">
+        <button type="button" data-view="one">
+          <svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2" /></svg>
+          One city
+        </button>
+        <button type="button" data-view="all">
+          <svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></svg>
+          All cities
+        </button>
+      </div>
       <div class="gallery-viewport" id="gallery-viewport">
         <div class="gallery-track" id="gallery-track"></div>
+      </div>
+      <div class="gallery-grid-scroll" id="gallery-grid-scroll">
+        <div class="gallery-grid" id="gallery-grid">
+          <svg class="gallery-route" id="gallery-route" aria-hidden="true"></svg>
+        </div>
       </div>
       <button class="gallery-arrow gallery-arrow--prev" id="gallery-prev" type="button" aria-label="Previous city">
         <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>

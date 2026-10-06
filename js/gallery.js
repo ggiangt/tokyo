@@ -1,4 +1,7 @@
-// Home screen: one city at a time, swipe / arrows / keys to move between them.
+// Home screen. Two views, switched at the top:
+//   "One city"   - one city at a time; swipe / arrows / keys move between them
+//   "All cities" - every city in a grid, with a dashed travel line joining
+//                  the cities you've been to, numbered in the order you went
 //   Gallery.init({ cities, onOpen(city), onLockedTap(city) })
 //   Gallery.update()          re-read photo counts and lock state
 //   Gallery.goTo(index)       slide to a city
@@ -12,10 +15,16 @@
   var dotsEl = document.getElementById("gallery-dots");
   var prevButton = document.getElementById("gallery-prev");
   var nextButton = document.getElementById("gallery-next");
+  var grid = document.getElementById("gallery-grid");
+  var gridScroll = document.getElementById("gallery-grid-scroll");
+  var route = document.getElementById("gallery-route");
+  var viewButtons = root.querySelectorAll("[data-view]");
 
   var cities = [];
   var cards = [];
+  var tiles = [];
   var dots = [];
+  var mode = "one";
   var current = 0;
   var active = true;
   var options = {};
@@ -33,6 +42,7 @@
     card.innerHTML =
       '<div class="city-art" role="button" tabindex="-1">' +
       '<img class="city-img" draggable="false" alt="">' +
+      '<span class="city-stop" hidden></span>' +
       '<div class="city-fog" aria-hidden="true">' +
       '<img class="city-cloud city-cloud--a" src="assets/cloud-1.png" alt="" draggable="false">' +
       '<img class="city-cloud city-cloud--b" src="assets/cloud-2.png" alt="" draggable="false">' +
@@ -96,7 +106,7 @@
   }
 
   function tapCard(index) {
-    if (index !== current) {
+    if (mode === "one" && index !== current) {
       goTo(index);
       return;
     }
@@ -104,7 +114,7 @@
     if (city.unlocked) {
       if (options.onOpen) options.onOpen(city);
     } else {
-      var card = cards[index];
+      var card = mode === "one" ? cards[index] : tiles[index];
       card.classList.remove("is-nudging");
       void card.offsetWidth;
       card.classList.add("is-nudging");
@@ -177,7 +187,7 @@
   });
 
   window.addEventListener("keydown", function (event) {
-    if (!active || event.defaultPrevented) return;
+    if (!active || mode !== "one" || event.defaultPrevented) return;
     if (event.key === "ArrowLeft") {
       goTo(current - 1);
       event.preventDefault();
@@ -195,21 +205,158 @@
 
   window.addEventListener("resize", function () {
     layout(false);
+    drawRoute();
   });
+
+  // ---- "All cities" grid ---------------------------------------------------
+
+  grid.addEventListener("click", function (event) {
+    var tile = event.target.closest(".city-card");
+    if (tile) tapCard(Number(tile.dataset.index));
+  });
+
+  // Cities you've been to, in the order you first took a photo there.
+  function visitedInOrder() {
+    function firstPhoto(city) {
+      return city.photos.reduce(function (earliest, photo) {
+        var t = photo.takenAt ? photo.takenAt.getTime() : Infinity;
+        return Math.min(earliest, t);
+      }, Infinity);
+    }
+    return cities
+      .filter(function (city) {
+        return city.unlocked && city.photos.length;
+      })
+      .sort(function (a, b) {
+        return firstPhoto(a) - firstPhoto(b);
+      });
+  }
+
+  // Number the visited tiles and join them with a dashed travel line.
+  function drawRoute() {
+    var visited = visitedInOrder();
+    tiles.forEach(function (tile) {
+      tile.querySelector(".city-stop").hidden = true;
+    });
+    visited.forEach(function (city, i) {
+      var stop = tiles[cities.indexOf(city)].querySelector(".city-stop");
+      stop.textContent = String(i + 1);
+      stop.hidden = false;
+    });
+
+    route.innerHTML = "";
+    if (mode !== "all" || visited.length < 2) return;
+    var box = grid.getBoundingClientRect();
+    route.setAttribute("width", box.width);
+    route.setAttribute("height", box.height);
+    route.setAttribute("viewBox", "0 0 " + box.width + " " + box.height);
+
+    var points = visited.map(function (city) {
+      var art = tiles[cities.indexOf(city)]
+        .querySelector(".city-art")
+        .getBoundingClientRect();
+      return {
+        x: art.left - box.left + art.width / 2,
+        y: art.top - box.top + art.height / 2,
+      };
+    });
+    // Gentle arcs between stops, bowing upward like a flight path.
+    var d = "M" + points[0].x + " " + points[0].y;
+    for (var i = 1; i < points.length; i += 1) {
+      var a = points[i - 1];
+      var b = points[i];
+      var lift = Math.min(90, Math.hypot(b.x - a.x, b.y - a.y) * 0.25);
+      d +=
+        " Q" + (a.x + b.x) / 2 + " " + ((a.y + b.y) / 2 - lift) +
+        " " + b.x + " " + b.y;
+    }
+    var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    path.setAttribute("class", "gallery-route-line");
+    route.appendChild(path);
+  }
+
+  function setMode(next, remember) {
+    mode = next === "all" ? "all" : "one";
+    root.classList.toggle("is-grid", mode === "all");
+    viewButtons.forEach(function (button) {
+      var on = button.dataset.view === mode;
+      button.classList.toggle("is-active", on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    if (remember) {
+      try {
+        localStorage.setItem("gallery-view", mode);
+      } catch (error) {}
+    }
+    if (mode === "one") {
+      layout(false);
+    } else {
+      requestAnimationFrame(drawRoute);
+    }
+  }
+
+  viewButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      setMode(button.dataset.view, true);
+    });
+  });
+
+  // The reveal itself: fog clears, colour fills in, then the caption pops
+  // in with the polaroid animation and the count ticks up.
+  function playReveal(card, city, done) {
+    card.classList.add("is-revealing");
+    card.classList.remove("is-locked");
+    card.querySelector(".city-lock-text").textContent = "";
+    var countWrap = card.querySelector(".city-count-wrap");
+    countWrap.style.visibility = "hidden";
+
+    setTimeout(function () {
+      var caption = card.querySelector(".city-caption");
+      var countEl = card.querySelector(".city-count");
+      var total = city.photos.length;
+      var start = performance.now();
+      countWrap.style.visibility = "";
+      caption.classList.add("is-popping");
+      Effects.playPaperSound();
+      (function tick() {
+        var t = Math.min(1, (performance.now() - start) / 700);
+        countEl.textContent = photoCountLabel(Math.max(1, Math.round(total * t)));
+        if (t < 1) requestAnimationFrame(tick);
+      })();
+
+      setTimeout(function () {
+        card.classList.remove("is-revealing");
+        caption.classList.remove("is-popping");
+        updateCard(card, city);
+        if (done) done();
+      }, 1100);
+    }, 900);
+  }
 
   window.Gallery = {
     init: function (cityList, opts) {
       cities = cityList;
       options = opts || {};
       track.innerHTML = "";
+      grid.querySelectorAll(".city-card").forEach(function (tile) {
+        tile.remove();
+      });
       dotsEl.innerHTML = "";
       cards = [];
+      tiles = [];
       dots = [];
 
       for (var i = 0; i < cities.length; i += 1) {
         var card = buildCard(cities[i], i);
         track.appendChild(card);
         cards.push(card);
+
+        var tile = buildCard(cities[i], i);
+        tile.classList.add("city-card--tile");
+        tile.querySelector(".city-art").tabIndex = 0;
+        grid.appendChild(tile);
+        tiles.push(tile);
 
         var dot = document.createElement("button");
         dot.className = "gallery-dot";
@@ -229,51 +376,40 @@
 
       this.update();
       goTo(0, false);
+      var saved = "one";
+      try {
+        saved = localStorage.getItem("gallery-view") || "one";
+      } catch (error) {}
+      setMode(saved, false);
     },
     update: function () {
       for (var i = 0; i < cards.length; i += 1) {
         updateCard(cards[i], cities[i]);
+        updateCard(tiles[i], cities[i]);
         dots[i].classList.toggle("is-locked", !cities[i].unlocked);
       }
+      drawRoute();
     },
     goTo: goTo,
     reveal: function (cityId, done) {
       var index = this.indexOf(cityId);
-      var card = cards[index];
       var city = cities[index];
+      dots[index].classList.remove("is-locked");
       goTo(index);
 
-      // Wait for the slide to settle, then clear the fog.
+      // The view that isn't showing just switches to the unlocked look.
+      var shown = mode === "one" ? cards[index] : tiles[index];
+      updateCard(mode === "one" ? tiles[index] : cards[index], city);
+      if (mode === "all") {
+        shown.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+
+      // Wait for the slide (or scroll) to settle, then play the reveal.
       setTimeout(function () {
-        card.classList.add("is-revealing");
-        card.classList.remove("is-locked");
-        dots[index].classList.remove("is-locked");
-        card.querySelector(".city-lock-text").textContent = "";
-        var countWrap = card.querySelector(".city-count-wrap");
-        countWrap.style.visibility = "hidden";
-
-        // Then pop the caption in with the polaroid animation and count up.
-        setTimeout(function () {
-          var caption = card.querySelector(".city-caption");
-          var countEl = card.querySelector(".city-count");
-          var total = city.photos.length;
-          var start = performance.now();
-          countWrap.style.visibility = "";
-          caption.classList.add("is-popping");
-          Effects.playPaperSound();
-          (function tick() {
-            var t = Math.min(1, (performance.now() - start) / 700);
-            countEl.textContent = photoCountLabel(Math.max(1, Math.round(total * t)));
-            if (t < 1) requestAnimationFrame(tick);
-          })();
-
-          setTimeout(function () {
-            card.classList.remove("is-revealing");
-            caption.classList.remove("is-popping");
-            updateCard(card, city);
-            if (done) done();
-          }, 1100);
-        }, 900);
+        playReveal(shown, city, function () {
+          drawRoute();
+          if (done) done();
+        });
       }, 600);
     },
     indexOf: function (cityId) {
