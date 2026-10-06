@@ -22,9 +22,7 @@
     return count + " " + word + (count === 1 ? "" : "s");
   }
 
-  // ---- Polaroid cards -----------------------------------------------------
-
-  var cardAngles = [-11, -3, 8, 12, -7, 4, -9, 10];
+  // ---- Photo cards --------------------------------------------------------
 
   function formatDate(date) {
     return date
@@ -40,22 +38,14 @@
     return (a.takenAt || 0) - (b.takenAt || 0);
   }
 
-  function toCards(photos, captionFor) {
+  // Oldest first, so the newest (the one shown on the pin) is last.
+  function toCards(photos) {
     return photos
       .slice()
       .sort(byDate)
-      .map(function (photo, i) {
-        return {
-          photo: 'url("' + photo.url + '")',
-          src: photo.url,
-          angle: cardAngles[i % cardAngles.length],
-          caption: captionFor(photo),
-        };
+      .map(function (photo) {
+        return { src: photo.url, caption: formatDate(photo.takenAt) };
       });
-  }
-
-  function dateCaption(photo) {
-    return formatDate(photo.takenAt);
   }
 
   // ---- Screens ------------------------------------------------------------
@@ -135,10 +125,8 @@
   window.addEventListener("popstate", route);
   window.addEventListener("keydown", function (event) {
     if (event.key !== "Escape") return;
-    if (Polaroids.unfocus()) {
-      return;
-    } else if (Polaroids.isOpen()) {
-      Polaroids.hide();
+    if (Polaroids.isOpen()) {
+      Polaroids.close();
     } else if (openCityId) {
       goBack();
     }
@@ -210,7 +198,7 @@
     return newCount ? 350 + newCount * 260 : 0;
   }
 
-  DioramaMap.onLandmark = function (city, key) {
+  DioramaMap.onLandmark = function (city, key, pinCard) {
     var landmark = city.landmarks.filter(function (l) {
       return l.key === key;
     })[0];
@@ -221,14 +209,15 @@
       Notice.toast("No photos at " + landmark.name + " yet.");
       return;
     }
-    Polaroids.show(city.id + ":" + key, toCards(photos, dateCaption));
+    var cards = toCards(photos);
+    Polaroids.open(cards, pinCard, cards.length - 1);
   };
 
   DioramaMap.onPinTap = function (city, pin) {
     var photo = city.photos.filter(function (p) {
       return p.id === pin.photoId;
     })[0];
-    if (photo) Polaroids.show("photo:" + photo.id, toCards([photo], dateCaption));
+    if (photo) Polaroids.open(toCards([photo]), pin.card, 0);
   };
 
   DioramaMap.onEmptyTap = function () {
@@ -258,6 +247,7 @@
         if (where.kind === "far") far.push(photo);
         city = randomOpenCity();
       }
+      Polaroids.preload(photo.url);
       photo.landmarkKey = where.landmark ? where.landmark.key : null;
       photo.spot = null;
       city.photos.push(photo);

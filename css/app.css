@@ -947,37 +947,116 @@ body.view-gallery .pin-layer {
   }
 }
 
-/* ---- Enlarged polaroid --------------------------------------------------- */
 
-.polaroid-backdrop {
+/* ---- Photo viewer (a pin grown into a big polaroid) ---------------------- */
+
+.zoom {
   position: absolute;
   inset: 0;
-  z-index: 2147483647;
+  display: none;
+  pointer-events: none;
+}
+.zoom.is-open {
+  display: block;
+}
+.zoom-backdrop {
+  position: absolute;
+  inset: 0;
   background: rgba(46, 34, 22, 0.5);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   opacity: 0;
-  pointer-events: none;
-  transition: opacity 300ms ease;
+  transition: opacity 320ms ease;
   cursor: zoom-out;
 }
-.polaroid-backdrop.is-visible {
+.zoom-backdrop.is-visible {
   opacity: 1;
   pointer-events: auto;
 }
-.polaroid.is-focused {
-  cursor: default;
+.zoom-card {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  transform-origin: center;
+}
+.zoom-card.is-moving {
   transition:
     left 460ms cubic-bezier(0.2, 0.8, 0.2, 1),
     top 460ms cubic-bezier(0.2, 0.8, 0.2, 1),
     width 460ms cubic-bezier(0.2, 0.8, 0.2, 1),
     height 460ms cubic-bezier(0.2, 0.8, 0.2, 1),
     transform 460ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  transition-delay: 0ms;
 }
-.polaroid.is-focused .polaroid-face {
+.zoom-card .polaroid-face {
   box-shadow: 0 40px 80px rgba(30, 20, 10, 0.45);
 }
-.polaroid.is-focused .polaroid-caption {
+.zoom-card .polaroid-caption {
   font-size: 17px;
+}
+.zoom.is-closing .zoom-card .polaroid-caption {
+  opacity: 0;
+}
+.zoom-arrow {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-top: -24px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 253, 249, 0.9);
+  box-shadow: 0 8px 22px rgba(30, 20, 10, 0.25);
+  color: var(--ink);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.zoom-arrow svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.zoom-arrow--prev {
+  left: max(16px, env(safe-area-inset-left));
+}
+.zoom-arrow--next {
+  right: max(16px, env(safe-area-inset-right));
+}
+.zoom-counter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  color: var(--paper);
+  font:
+    600 14px/1 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  text-align: center;
+}
+.zoom.is-closing .zoom-arrow,
+.zoom.is-closing .zoom-counter,
+.zoom-arrow[hidden],
+.zoom-counter[hidden] {
+  display: none;
+}
+/* Phones: arrows sit under the photo instead of over its edges. */
+@media (max-width: 640px) {
+  .zoom-arrow {
+    top: auto;
+    bottom: calc(52px + env(safe-area-inset-bottom));
+    margin-top: 0;
+  }
+  .zoom-arrow--prev {
+    left: calc(50% - 64px);
+  }
+  .zoom-arrow--next {
+    right: calc(50% - 64px);
+  }
 }

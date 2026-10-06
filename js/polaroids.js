@@ -1,293 +1,242 @@
-// Draggable polaroids (moved from index.html; same look and animation).
-// Polaroids.show(key, cards) opens a set, Polaroids.hide() closes it.
-// A card is { photo: 'url("...")', src: optional image URL, angle: degrees,
-//             caption: optional text }.
-// Tapping a polaroid (without dragging) enlarges it to the centre of the
-// screen at the photo's real shape; tapping outside it puts it back.
-// Polaroids.unfocus() puts an enlarged polaroid back (true if there was one).
+// Photo viewer. Tapping a photo pin on the map grows that pin into a large
+// polaroid in the centre of the screen; tapping outside shrinks it back.
+// Landmarks with several photos get arrows (and swipe) to step through them.
+//   Polaroids.open(cards, fromEl, startIndex)
+//       cards  - [{ src, caption }]
+//       fromEl - the pin element it grows out of and shrinks back into
+//   Polaroids.close()
+//   Polaroids.isOpen()
+//   Polaroids.preload(src)   learn a photo's shape ahead of time, so it can
+//                            start growing the moment it's tapped
 (function () {
-  var polaroidLayer = document.getElementById("polaroid-layer");
-  var polaroidTray = document.createElement("div");
-  polaroidTray.className = "polaroid-tray";
-  polaroidLayer.appendChild(polaroidTray);
-  var dragState = null;
-  var activeKey = null;
-  var focused = null;
-  var backdrop = document.createElement("div");
-  backdrop.className = "polaroid-backdrop";
+  var layer = document.getElementById("polaroid-layer");
+  var ZOOM_MS = 460;
 
-  function enablePolaroidDragging(frame) {
-    frame.addEventListener("pointerdown", function (event) {
-      if (event.button !== 0) {
-        return;
-      }
+  var root = document.createElement("div");
+  root.className = "zoom";
+  root.innerHTML =
+    '<div class="zoom-backdrop"></div>' +
+    '<div class="zoom-card">' +
+    '<div class="polaroid-face has-caption">' +
+    '<div class="polaroid-photo"></div>' +
+    '<div class="polaroid-caption"></div>' +
+    "</div></div>" +
+    '<button class="zoom-arrow zoom-arrow--prev" type="button" aria-label="Previous photo">' +
+    '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg></button>' +
+    '<button class="zoom-arrow zoom-arrow--next" type="button" aria-label="Next photo">' +
+    '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg></button>' +
+    '<p class="zoom-counter"></p>';
+  layer.appendChild(root);
 
-      event.stopPropagation();
-      if (focused) {
-        return;
-      }
-      dragState = {
-        frame: frame,
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        offsetX: event.clientX - frame.offsetLeft,
-        offsetY: event.clientY - frame.offsetTop,
-      };
-      frame.classList.add("is-dragging");
-      frame.style.zIndex = String(Date.now());
-      frame.setPointerCapture(event.pointerId);
-    });
+  var backdrop = root.querySelector(".zoom-backdrop");
+  var card = root.querySelector(".zoom-card");
+  var photo = root.querySelector(".polaroid-photo");
+  var caption = root.querySelector(".polaroid-caption");
+  var prevButton = root.querySelector(".zoom-arrow--prev");
+  var nextButton = root.querySelector(".zoom-arrow--next");
+  var counter = root.querySelector(".zoom-counter");
 
-    frame.addEventListener("pointermove", function (event) {
-      if (
-        !dragState ||
-        dragState.frame !== frame ||
-        dragState.pointerId !== event.pointerId
-      ) {
-        return;
-      }
+  var state = null; // the open photo set
+  var closing = null; // a set still shrinking back into its pin
+  var ratios = {};
 
-      var nextLeft = event.clientX - dragState.offsetX;
-      var nextTop = event.clientY - dragState.offsetY;
-      var maxLeft = polaroidTray.clientWidth - frame.offsetWidth;
-      var maxTop = polaroidTray.clientHeight - frame.offsetHeight;
-
-      frame.style.left = Math.max(0, Math.min(maxLeft, nextLeft)) + "px";
-      frame.style.top = Math.max(0, Math.min(maxTop, nextTop)) + "px";
-    });
-
-    function releaseDrag(event) {
-      if (
-        !dragState ||
-        dragState.frame !== frame ||
-        dragState.pointerId !== event.pointerId
-      ) {
-        return;
-      }
-
-      var moved = Math.hypot(
-        event.clientX - dragState.startX,
-        event.clientY - dragState.startY,
-      );
-      frame.classList.remove("is-dragging");
-      frame.releasePointerCapture(event.pointerId);
-      dragState = null;
-      if (event.type === "pointerup" && moved < 6) {
-        focus(frame);
-      }
-    }
-
-    frame.addEventListener("pointerup", releaseDrag);
-    frame.addEventListener("pointercancel", releaseDrag);
-    // Stop the browser's follow-up click after a tap, which would land on
-    // the backdrop behind the enlarged polaroid and shrink it straight away.
-    frame.addEventListener(
-      "touchend",
-      function (event) {
-        event.preventDefault();
-      },
-      { passive: false },
-    );
-  }
-
-  // ---- Enlarging one polaroid ---------------------------------------------
-
-  var FOCUS_MS = 460;
-
-  // Size of the enlarged card: the photo at its own shape, as big as fits.
-  function focusSize(frame) {
-    var face = 12;
-    var caption = frame.querySelector(".polaroid-caption") ? 40 : 0;
-    var ratio = Number(frame.dataset.ratio) || 0.75;
-    var maxWidth = Math.min(window.innerWidth - 32, 1100) - face * 2;
-    var maxHeight = window.innerHeight - 56 - face * 2 - caption;
-    var photoWidth = Math.min(maxWidth, maxHeight * ratio);
-    var photoHeight = photoWidth / ratio;
-    var width = Math.round(photoWidth + face * 2);
-    var height = Math.round(photoHeight + face * 2 + caption);
-    return {
-      width: width,
-      height: height,
-      left: Math.round((window.innerWidth - width) / 2),
-      top: Math.round((window.innerHeight - height) / 2),
-    };
-  }
-
-  function applyBox(frame, box, angle) {
-    frame.style.setProperty("--card-width", box.width + "px");
-    frame.style.setProperty("--card-height", box.height + "px");
-    frame.style.left = box.left + "px";
-    frame.style.top = box.top + "px";
-    frame.style.transform = "rotate(" + angle + ")";
-  }
-
-  function focus(frame) {
-    if (focused) return;
-    var style = frame.style;
-    focused = {
-      frame: frame,
-      at: performance.now(),
-      home: {
-        width: parseFloat(style.getPropertyValue("--card-width")),
-        height: parseFloat(style.getPropertyValue("--card-height")),
-        left: frame.offsetLeft,
-        top: frame.offsetTop,
-      },
-      angle: style.getPropertyValue("--settle-angle") || "0deg",
-      zIndex: style.zIndex,
-    };
-
-    // Swap the pop animation for a plain transform so it can transition.
-    style.animation = "none";
-    style.transform = "rotate(" + focused.angle + ")";
-    // Dragged polaroids carry huge z-indexes, so put the backdrop and this
-    // polaroid last in the tray at the top z-index: last one wins.
-    style.zIndex = "2147483647";
-    polaroidTray.appendChild(backdrop);
-    polaroidTray.appendChild(frame);
-    void frame.offsetWidth;
-
-    frame.classList.add("is-focused");
-    backdrop.classList.add("is-visible");
-    applyBox(frame, focusSize(frame), "0deg");
-    Effects.playPaperSound();
-  }
-
-  function unfocus() {
-    if (!focused) return false;
-    var current = focused;
-    focused = null;
-    backdrop.classList.remove("is-visible");
-    applyBox(current.frame, current.home, current.angle);
-    setTimeout(function () {
-      current.frame.classList.remove("is-focused");
-      current.frame.style.zIndex = current.zIndex;
-      if (!focused && backdrop.parentNode) backdrop.remove();
-    }, FOCUS_MS);
-    return true;
-  }
-
-  backdrop.addEventListener("click", function (event) {
-    event.stopPropagation();
-    // Ignore a click that arrives right after the tap that enlarged it.
-    if (focused && performance.now() - focused.at > 350) unfocus();
-  });
-
-  window.addEventListener("resize", function () {
-    if (focused) applyBox(focused.frame, focusSize(focused.frame), "0deg");
-  });
-
-  function renderPolaroids(key, cards) {
-    polaroidTray.innerHTML = "";
-
-    for (var i = 0; i < cards.length; i += 1) {
-      var card = cards[i];
-      var frame = document.createElement("div");
-      var frontFace = document.createElement("div");
-      var photo = document.createElement("div");
-      var aspectVariants = [
-        { width: 214, height: 286 },
-        { width: 246, height: 296 },
-        { width: 268, height: 252 },
-        { width: 228, height: 316 },
-        { width: 258, height: 278 },
-      ];
-      var aspect = aspectVariants[(i + key.length) % aspectVariants.length];
-
-      frame.className = "polaroid";
-      frontFace.className = "polaroid-face polaroid-face--front";
-      photo.className = "polaroid-photo";
-
-      frame.style.setProperty("--card-width", aspect.width + "px");
-      frame.style.setProperty("--card-height", aspect.height + "px");
-      frame.style.left = "calc(50% - 270px + " + i * 120 + "px)";
-      frame.style.top =
-        Math.round(window.innerHeight * 0.46 + (i % 2) * 18) + "px";
-      frame.style.setProperty("--angle", card.angle + "deg");
-      frame.style.setProperty(
-        "--settle-angle",
-        (card.angle + (Math.random() * 4 - 2)).toFixed(2) + "deg",
-      );
-      frame.style.setProperty(
-        "--start-angle",
-        (card.angle + (Math.random() * 10 - 5)).toFixed(2) + "deg",
-      );
-      frame.style.setProperty(
-        "--overshoot-angle",
-        (card.angle + (Math.random() * 12 - 6)).toFixed(2) + "deg",
-      );
-      frame.style.setProperty(
-        "--delay",
-        Math.round(i * 70 + Math.random() * 45) + "ms",
-      );
-      frame.style.transform =
-        "translateY(180px) rotate(var(--start-angle)) scale(0.96)";
-      photo.style.setProperty("--photo", card.photo);
-      if (card.src) {
-        // Remember the photo's real shape for when it's enlarged.
-        (function (target, src) {
-          var image = new Image();
-          image.onload = function () {
-            target.dataset.ratio = String(
-              image.naturalWidth / image.naturalHeight,
-            );
-          };
-          image.src = src;
-        })(frame, card.src);
-      }
-
-      frontFace.appendChild(photo);
-      if (card.caption) {
-        var caption = document.createElement("div");
-        caption.className = "polaroid-caption";
-        caption.textContent = card.caption;
-        frontFace.classList.add("has-caption");
-        frontFace.appendChild(caption);
-      }
-      frame.appendChild(frontFace);
-      enablePolaroidDragging(frame);
-      polaroidTray.appendChild(frame);
-    }
-  }
-
-  function show(key, cards) {
-    if (activeKey === key) {
+  // Photo shape (width / height), loaded once per photo.
+  function ratioOf(src, done) {
+    if (ratios[src]) {
+      done(ratios[src]);
       return;
     }
+    var image = new Image();
+    image.onload = function () {
+      ratios[src] = image.naturalWidth / image.naturalHeight;
+      done(ratios[src]);
+    };
+    image.onerror = function () {
+      done(0.75);
+    };
+    image.src = src;
+  }
 
-    activeKey = key;
-    focused = null;
-    renderPolaroids(key, cards);
-    Effects.playPaperSound();
-    polaroidTray.classList.remove("is-visible");
-    requestAnimationFrame(function () {
-      polaroidTray.classList.add("is-visible");
+  // The big card: the photo at its own shape, as large as fits.
+  function centreBox(ratio) {
+    var face = 12;
+    var captionHeight = 40;
+    var narrow = window.innerWidth < 640;
+    var maxWidth = Math.min(window.innerWidth - 32, 1100) - face * 2;
+    var maxHeight =
+      window.innerHeight - (narrow ? 140 : 100) - face * 2 - captionHeight;
+    var photoWidth = Math.min(maxWidth, maxHeight * ratio);
+    var width = Math.round(photoWidth + face * 2);
+    var height = Math.round(photoWidth / ratio + face * 2 + captionHeight);
+    return {
+      left: Math.round((window.innerWidth - width) / 2),
+      top: Math.round((window.innerHeight - height) / 2),
+      width: width,
+      height: height,
+      angle: 0,
+    };
+  }
+
+  // Where the pin card sits on screen (its unrotated box and its tilt).
+  function pinBox(el) {
+    var rect = el.getBoundingClientRect();
+    var angle =
+      parseFloat(getComputedStyle(el).getPropertyValue("--settle-angle")) || 0;
+    var width = el.offsetWidth;
+    var height = el.offsetHeight;
+    return {
+      left: rect.left + (rect.width - width) / 2,
+      top: rect.top + (rect.height - height) / 2,
+      width: width,
+      height: height,
+      angle: angle,
+    };
+  }
+
+  function place(box) {
+    card.style.left = box.left + "px";
+    card.style.top = box.top + "px";
+    card.style.width = box.width + "px";
+    card.style.height = box.height + "px";
+    card.style.transform = "rotate(" + box.angle + "deg)";
+  }
+
+  function showCard(index, animate) {
+    var current = state.cards[index];
+    state.index = index;
+    photo.style.setProperty("--photo", 'url("' + current.src + '")');
+    caption.textContent = current.caption || "";
+    var many = state.cards.length > 1;
+    prevButton.hidden = !many;
+    nextButton.hidden = !many;
+    counter.hidden = !many;
+    counter.textContent = index + 1 + " / " + state.cards.length;
+    ratioOf(current.src, function (ratio) {
+      if (!state || state.index !== index) return;
+      card.classList.toggle("is-moving", animate !== false);
+      place(centreBox(ratio));
     });
   }
 
-  function hide() {
-    if (focused) {
-      focused = null;
-      backdrop.classList.remove("is-visible");
-      backdrop.remove();
-    }
-    activeKey = null;
-    polaroidTray.classList.remove("is-visible");
+  function step(delta) {
+    if (!state || state.cards.length < 2) return;
+    var count = state.cards.length;
+    showCard((state.index + delta + count) % count);
+    Effects.playPaperSound();
   }
 
-  polaroidTray.addEventListener("click", function (event) {
-    if (event.target === polaroidTray) {
-      hide();
+  // Ends a shrink that's still running, putting its pin back.
+  function finishClosing() {
+    if (!closing) return;
+    clearTimeout(closing.timer);
+    if (closing.fromEl) closing.fromEl.style.visibility = "";
+    closing = null;
+    root.classList.remove("is-closing");
+  }
+
+  function open(cards, fromEl, startIndex) {
+    if (!cards.length) return;
+    finishClosing();
+    var index = Math.max(0, Math.min(cards.length - 1, startIndex || 0));
+    state = {
+      cards: cards,
+      index: index,
+      fromEl: fromEl,
+      at: performance.now(),
+    };
+
+    // Start exactly on top of the pin, then grow to the centre.
+    card.classList.remove("is-moving");
+    if (fromEl) {
+      place(pinBox(fromEl));
+      fromEl.style.visibility = "hidden";
+    } else {
+      place({
+        left: window.innerWidth / 2 - 60,
+        top: window.innerHeight / 2 - 70,
+        width: 120,
+        height: 140,
+        angle: 0,
+      });
     }
+    root.classList.add("is-open");
+    void card.offsetWidth;
+    backdrop.classList.add("is-visible");
+    showCard(index, true);
+    Effects.playPaperSound();
+  }
+
+  // Shrink back into the pin it came from.
+  function close() {
+    if (!state) return;
+    closing = state;
+    state = null;
+    backdrop.classList.remove("is-visible");
+    root.classList.add("is-closing");
+    card.classList.add("is-moving");
+    if (closing.fromEl && closing.fromEl.isConnected) {
+      place(pinBox(closing.fromEl));
+    }
+    closing.timer = setTimeout(function () {
+      finishClosing();
+      if (!state) root.classList.remove("is-open");
+    }, ZOOM_MS);
+  }
+
+  backdrop.addEventListener("click", function () {
+    // Ignore a click that arrives right after the tap that opened it.
+    if (state && performance.now() - state.at > 350) close();
+  });
+  prevButton.addEventListener("click", function () {
+    step(-1);
+  });
+  nextButton.addEventListener("click", function () {
+    step(1);
+  });
+
+  // Swipe left/right on the big photo to step through a landmark's photos.
+  var swipe = null;
+  card.addEventListener("pointerdown", function (event) {
+    swipe = { x: event.clientX, y: event.clientY };
+  });
+  card.addEventListener("pointerup", function (event) {
+    if (!swipe) return;
+    var dx = event.clientX - swipe.x;
+    var dy = event.clientY - swipe.y;
+    swipe = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      step(dx < 0 ? 1 : -1);
+    }
+  });
+
+  window.addEventListener(
+    "keydown",
+    function (event) {
+      if (!state) return;
+      if (event.key === "Escape") close();
+      else if (event.key === "ArrowLeft") step(-1);
+      else if (event.key === "ArrowRight") step(1);
+      else return;
+      // Keep the map and gallery from also reacting to these keys.
+      event.stopPropagation();
+      event.preventDefault();
+    },
+    true,
+  );
+
+  window.addEventListener("resize", function () {
+    if (state) showCard(state.index, false);
   });
 
   window.Polaroids = {
-    show: show,
-    hide: hide,
-    unfocus: unfocus,
+    open: open,
+    close: close,
+    hide: close,
     isOpen: function () {
-      return activeKey !== null;
+      return !!state;
+    },
+    preload: function (src) {
+      ratioOf(src, function () {});
     },
   };
 })();

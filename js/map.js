@@ -3,7 +3,7 @@
 //   DioramaMap.open(city, onReady)  show a city's map
 //   DioramaMap.close()              stop rendering (gallery is showing)
 //   DioramaMap.preload(city)        start loading a city's artwork early
-//   DioramaMap.onLandmark = function (city, landmarkKey) {}
+//   DioramaMap.onLandmark = function (city, landmarkKey, pinCardEl) {}
 //   DioramaMap.onEmptyTap = function (city) {}
 //   DioramaMap.setPins(pins)        photo pins: [{ id, x, y, photo, count, isNew }]
 //   DioramaMap.onPinTap = function (city, pin) {}
@@ -326,7 +326,7 @@
   function handleTap(clientX, clientY) {
     var pin = pinAt(clientX, clientY);
     if (pin && pin.landmark) {
-      if (api.onLandmark) api.onLandmark(activeCity, pin.landmark);
+      if (api.onLandmark) api.onLandmark(activeCity, pin.landmark, pin.card);
       return;
     }
     if (pin) {
@@ -338,7 +338,12 @@
     var key = uv ? getHoveredLandmark(uv) : null;
 
     if (key) {
-      if (api.onLandmark) api.onLandmark(activeCity, key);
+      var landmarkPin = pins.filter(function (p) {
+        return p.landmark === key;
+      })[0];
+      if (api.onLandmark) {
+        api.onLandmark(activeCity, key, landmarkPin && landmarkPin.card);
+      }
       return;
     }
 
