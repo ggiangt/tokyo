@@ -47,6 +47,7 @@
       .map(function (photo, i) {
         return {
           photo: 'url("' + photo.url + '")',
+          src: photo.url,
           angle: cardAngles[i % cardAngles.length],
           caption: captionFor(photo),
         };
@@ -134,7 +135,9 @@
   window.addEventListener("popstate", route);
   window.addEventListener("keydown", function (event) {
     if (event.key !== "Escape") return;
-    if (Polaroids.isOpen()) {
+    if (Polaroids.unfocus()) {
+      return;
+    } else if (Polaroids.isOpen()) {
       Polaroids.hide();
     } else if (openCityId) {
       goBack();
